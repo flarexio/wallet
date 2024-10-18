@@ -1,6 +1,11 @@
 package wallets
 
-import "github.com/go-webauthn/webauthn/protocol"
+import (
+	"net/http"
+
+	"github.com/go-resty/resty/v2"
+	"github.com/go-webauthn/webauthn/protocol"
+)
 
 type Service interface {
 	PasskeyService
@@ -16,7 +21,7 @@ type PasskeyService interface {
 
 type RegistrationService interface {
 	StartRegistration(userID string, username string) (*protocol.CredentialCreation, error)
-	FinalizeRegistration(req *protocol.ParsedCredentialCreationData) (string, error)
+	FinishRegistration(req *protocol.ParsedCredentialCreationData) (string, error)
 }
 
 type LoginService interface {
@@ -41,17 +46,69 @@ type WalletService interface {
 }
 
 func NewService(cfg Config) Service {
-	return &service{cfg}
+	baseURL := cfg.PasskeysConfig.BaseURL + "/" + cfg.PasskeysConfig.TenantID
+	apiSecret := cfg.PasskeysConfig.PasskeyAPI.Secret
+
+	client := resty.New().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("apiKey", apiSecret).
+		SetBaseURL(baseURL)
+
+	return &service{cfg, client}
 }
 
 type service struct {
-	cfg Config
+	cfg    Config
+	client *resty.Client
 }
 
 func (svc *service) StartRegistration(userID string, username string) (*protocol.CredentialCreation, error) {
-	return nil, nil
+	params := map[string]string{
+		"user_id":  userID,
+		"username": username,
+	}
+
+	var (
+		successResult *protocol.CredentialCreation
+		failureResult *FailureResult
+	)
+
+	resp, err := svc.client.R().
+		SetBody(params).
+		SetResult(&successResult).
+		SetError(&failureResult).
+		Post("/registration/initialize")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, failureResult
+	}
+
+	return successResult, nil
 }
 
-func (svc *service) FinalizeRegistration(req *protocol.ParsedCredentialCreationData) (string, error) {
-	return "", nil
+func (svc *service) FinishRegistration(req *protocol.ParsedCredentialCreationData) (string, error) {
+	var (
+		successResult *TokenResult
+		failureResult *FailureResult
+	)
+
+	resp, err := svc.client.R().
+		SetBody(&req).
+		SetResult(&successResult).
+		SetError(&failureResult).
+		Post("/registration/finalize")
+
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return "", failureResult
+	}
+
+	return successResult.Token, nil
 }

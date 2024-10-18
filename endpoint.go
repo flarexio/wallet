@@ -1,23 +1,48 @@
 package wallets
 
 import (
-	"time"
+	"context"
+	"errors"
 
-	"github.com/google/uuid"
+	"github.com/go-kit/kit/endpoint"
+	"github.com/go-webauthn/webauthn/protocol"
 )
 
-type Credential struct {
-	ID              string     `json:"id"`
-	Name            *string    `json:"name,omitempty"`
-	PublicKey       string     `json:"public_key"`
-	AttestationType string     `json:"attestation_type"`
-	AAGUID          uuid.UUID  `json:"aaguid"`
-	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	Transports      []string   `json:"transports"`
-	BackupEligible  bool       `json:"backup_eligible"`
-	BackupState     bool       `json:"backup_state"`
-	IsMFA           bool       `json:"is_mfa"`
+type StartRegistrationRequest struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+}
+
+func StartRegistrationEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req, ok := request.(*StartRegistrationRequest)
+		if !ok {
+			return nil, errors.New("invalid type")
+		}
+
+		opts, err := svc.StartRegistration(req.UserID, req.Username)
+		if err != nil {
+			return nil, err
+		}
+
+		return opts, err
+	}
+}
+
+func FinishRegistrationEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req, ok := request.(*protocol.ParsedCredentialCreationData)
+		if !ok {
+			return nil, errors.New("invalid type")
+		}
+
+		token, err := svc.FinishRegistration(req)
+		if err != nil {
+			return nil, err
+		}
+
+		return token, nil
+	}
 }
 
 type StartTransactionRequest struct {
