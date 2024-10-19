@@ -20,15 +20,15 @@ import (
 
 func main() {
 	app := &cli.App{
-		Name: "wallets",
+		Name: "wallet",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "path",
-				EnvVars: []string{"WALLETS_PATH"},
+				EnvVars: []string{"WALLET_PATH"},
 			},
 			&cli.IntFlag{
 				Name:    "port",
-				EnvVars: []string{"WALLETS_SERVICE_PORT"},
+				EnvVars: []string{"WALLET_SERVICE_PORT"},
 				Value:   8080,
 			},
 		},
@@ -54,7 +54,7 @@ func run(cli *cli.Context) error {
 			return err
 		}
 
-		path = homeDir + "/.flarex/wallets"
+		path = homeDir + "/.flarex/wallet"
 	}
 
 	f, err := os.Open(path + "/config.yaml")
