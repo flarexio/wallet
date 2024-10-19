@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
-	"github.com/flarexio/wallets"
+	"github.com/flarexio/wallet"
 )
 
 func main() {
@@ -62,7 +63,7 @@ func run(cli *cli.Context) error {
 	}
 	defer f.Close()
 
-	var cfg wallets.Config
+	var cfg wallet.Config
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
 		return err
 	}
@@ -73,20 +74,41 @@ func run(cli *cli.Context) error {
 	}
 	defer log.Sync()
 
-	svc := wallets.NewService(cfg)
+	svc := wallet.NewService(cfg)
 
 	r := gin.Default()
 
-	// POST /passkey/start-registration
+	// GET /.well-known/webauthn
+	r.GET("/.well-known/webauthn", func(c *gin.Context) {
+		origins := struct {
+			Origins []string `json:"origins"`
+		}{Origins: cfg.PasskeysConfig.Origins}
+
+		c.JSON(http.StatusOK, origins)
+	})
+
+	// POST /passkeys/registration/initialize
 	{
-		endpoint := wallets.StartRegistrationEndpoint(svc)
-		r.POST("/passkey/start-registration", wallets.StartRegistrationHandler(endpoint))
+		endpoint := wallet.InitializeRegistrationEndpoint(svc)
+		r.POST("/passkeys/registration/initialize", wallet.InitializeRegistrationHandler(endpoint))
 	}
 
-	// POST /passkey/finalize-registration
+	// POST /passkeys/registration/finalize
 	{
-		endpoint := wallets.FinishRegistrationEndpoint(svc)
-		r.POST("/passkey/finalize-registration", wallets.FinishRegistrationHandler(endpoint))
+		endpoint := wallet.FinalizeRegistrationEndpoint(svc)
+		r.POST("/passkeys/registration/finalize", wallet.FinalizeRegistrationHandler(endpoint))
+	}
+
+	// POST /passkeys/login/initialize
+	{
+		endpoint := wallet.InitializeLoginEndpoint(svc)
+		r.POST("/passkeys/login/initialize", wallet.InitializeLoginHandler(endpoint))
+	}
+
+	// POST /passkeys/login/finalize
+	{
+		endpoint := wallet.FinalizeLoginEndpoint(svc)
+		r.POST("/passkeys/login/finalize", wallet.FinalizeLoginHandler(endpoint))
 	}
 
 	port := cli.Int("port")

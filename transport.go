@@ -1,4 +1,4 @@
-package wallets
+package wallet
 
 import (
 	"net/http"
@@ -8,9 +8,9 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 )
 
-func StartRegistrationHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func InitializeRegistrationHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req *StartRegistrationRequest
+		var req *InitializeRegistrationRequest
 		if err := c.ShouldBind(&req); err != nil {
 			c.String(http.StatusBadRequest, err.Error())
 			c.Error(err)
@@ -31,10 +31,56 @@ func StartRegistrationHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	}
 }
 
-func FinishRegistrationHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func FinalizeRegistrationHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req *protocol.ParsedCredentialCreationData
+		req, err := protocol.ParseCredentialCreationResponse(c.Request)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			c.Error(err)
+			c.Abort()
+			return
+		}
+
+		ctx := c.Request.Context()
+		resp, err := endpoint(ctx, req)
+		if err != nil {
+			c.String(http.StatusExpectationFailed, err.Error())
+			c.Error(err)
+			c.Abort()
+			return
+		}
+
+		c.JSON(http.StatusOK, &resp)
+	}
+}
+
+func InitializeLoginHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req *InitializeLoginRequest
 		if err := c.ShouldBind(&req); err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			c.Error(err)
+			c.Abort()
+			return
+		}
+
+		ctx := c.Request.Context()
+		resp, err := endpoint(ctx, req)
+		if err != nil {
+			c.String(http.StatusExpectationFailed, err.Error())
+			c.Error(err)
+			c.Abort()
+			return
+		}
+
+		c.JSON(http.StatusOK, &resp)
+	}
+}
+
+func FinalizeLoginHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		req, err := protocol.ParseCredentialRequestResponse(c.Request)
+		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())
 			c.Error(err)
 			c.Abort()

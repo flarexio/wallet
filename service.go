@@ -1,4 +1,4 @@
-package wallets
+package wallet
 
 import (
 	"net/http"
@@ -14,19 +14,19 @@ type Service interface {
 
 type PasskeyService interface {
 	RegistrationService
-	// LoginService
+	LoginService
 	// CredentialServie
 	// TransactionService
 }
 
 type RegistrationService interface {
-	StartRegistration(userID string, username string) (*protocol.CredentialCreation, error)
-	FinishRegistration(req *protocol.ParsedCredentialCreationData) (string, error)
+	InitializeRegistration(userID string, username string) (*protocol.CredentialCreation, error)
+	FinalizeRegistration(req *protocol.ParsedCredentialCreationData) (string, error)
 }
 
 type LoginService interface {
-	StartLogin(userID string) (*protocol.CredentialAssertion, string, error)
-	FinishLogin(req *protocol.ParsedCredentialAssertionData) (string, error)
+	InitializeLogin(userID string) (*protocol.CredentialAssertion, string, error)
+	FinalizeLogin(req *protocol.ParsedCredentialAssertionData) (string, error)
 }
 
 type CredentialServie interface {
@@ -36,8 +36,8 @@ type CredentialServie interface {
 }
 
 type TransactionService interface {
-	StartTransaction(req *StartTransactionRequest) (*protocol.CredentialAssertion, string, error)
-	FinishTransaction(req *protocol.ParsedCredentialAssertionData) (string, error)
+	InitializeTransaction(req *InitializeTransactionRequest) (*protocol.CredentialAssertion, string, error)
+	FinalizeTransaction(req *protocol.ParsedCredentialAssertionData) (string, error)
 }
 
 type WalletService interface {
@@ -62,7 +62,7 @@ type service struct {
 	client *resty.Client
 }
 
-func (svc *service) StartRegistration(userID string, username string) (*protocol.CredentialCreation, error) {
+func (svc *service) InitializeRegistration(userID string, username string) (*protocol.CredentialCreation, error) {
 	params := map[string]string{
 		"user_id":  userID,
 		"username": username,
@@ -90,17 +90,67 @@ func (svc *service) StartRegistration(userID string, username string) (*protocol
 	return successResult, nil
 }
 
-func (svc *service) FinishRegistration(req *protocol.ParsedCredentialCreationData) (string, error) {
+func (svc *service) FinalizeRegistration(req *protocol.ParsedCredentialCreationData) (string, error) {
 	var (
 		successResult *TokenResult
 		failureResult *FailureResult
 	)
 
 	resp, err := svc.client.R().
-		SetBody(&req).
+		SetBody(&req.Raw).
 		SetResult(&successResult).
 		SetError(&failureResult).
 		Post("/registration/finalize")
+
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return "", failureResult
+	}
+
+	return successResult.Token, nil
+}
+
+func (svc *service) InitializeLogin(userID string) (*protocol.CredentialAssertion, string, error) {
+	params := map[string]string{
+		"user_id": userID,
+	}
+
+	var (
+		successResult *protocol.CredentialAssertion
+		failureResult *FailureResult
+	)
+
+	resp, err := svc.client.R().
+		SetBody(params).
+		SetResult(&successResult).
+		SetError(&failureResult).
+		Post("/login/initialize")
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, "", failureResult
+	}
+
+	return successResult, "optional", nil
+}
+
+func (svc *service) FinalizeLogin(req *protocol.ParsedCredentialAssertionData) (string, error) {
+	var (
+		successResult *TokenResult
+		failureResult *FailureResult
+	)
+
+	resp, err := svc.client.R().
+		SetBody(&req.Raw).
+		SetResult(&successResult).
+		SetError(&failureResult).
+		Post("/login/finalize")
 
 	if err != nil {
 		return "", err

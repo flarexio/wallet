@@ -1,4 +1,4 @@
-module github.com/flarexio/wallets
+module github.com/flarexio/wallet
 
 go 1.23.0
 

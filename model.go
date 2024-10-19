@@ -1,6 +1,7 @@
-package wallets
+package wallet
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,11 +26,12 @@ type TokenResult struct {
 }
 
 type FailureResult struct {
-	Title   []string `json:"title"`
-	Details []string `json:"details"`
-	Status  int      `json:"status"`
+	Title   string `json:"title"`
+	Details string `json:"details"`
+	Status  int    `json:"status"`
 }
 
 func (result *FailureResult) Error() string {
-	return result.Title[0]
+	return fmt.Sprintf("status: %d, title: %s, details: %s",
+		result.Status, result.Title, result.Details)
 }
