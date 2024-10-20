@@ -87,30 +87,30 @@ func run(cli *cli.Context) error {
 		c.JSON(http.StatusOK, origins)
 	})
 
-	api := r.Group("/api")
+	passkeys := r.Group("/passkeys")
 	{
-		// POST /passkeys/registration/initialize
+		// POST /registration/initialize
 		{
 			endpoint := wallet.InitializeRegistrationEndpoint(svc)
-			api.POST("/passkeys/registration/initialize", wallet.InitializeRegistrationHandler(endpoint))
+			passkeys.POST("/registration/initialize", wallet.InitializeRegistrationHandler(endpoint))
 		}
 
-		// POST /passkeys/registration/finalize
+		// POST /registration/finalize
 		{
 			endpoint := wallet.FinalizeRegistrationEndpoint(svc)
-			api.POST("/passkeys/registration/finalize", wallet.FinalizeRegistrationHandler(endpoint))
+			passkeys.POST("/registration/finalize", wallet.FinalizeRegistrationHandler(endpoint))
 		}
 
-		// POST /passkeys/login/initialize
+		// POST /login/initialize
 		{
 			endpoint := wallet.InitializeLoginEndpoint(svc)
-			api.POST("/passkeys/login/initialize", wallet.InitializeLoginHandler(endpoint))
+			passkeys.POST("/login/initialize", wallet.InitializeLoginHandler(endpoint))
 		}
 
-		// POST /passkeys/login/finalize
+		// POST /login/finalize
 		{
 			endpoint := wallet.FinalizeLoginEndpoint(svc)
-			api.POST("/passkeys/login/finalize", wallet.FinalizeLoginHandler(endpoint))
+			passkeys.POST("/login/finalize", wallet.FinalizeLoginHandler(endpoint))
 		}
 	}
 
