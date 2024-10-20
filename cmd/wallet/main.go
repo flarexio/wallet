@@ -87,29 +87,37 @@ func run(cli *cli.Context) error {
 		c.JSON(http.StatusOK, origins)
 	})
 
-	// POST /passkeys/registration/initialize
+	api := r.Group("/api")
 	{
-		endpoint := wallet.InitializeRegistrationEndpoint(svc)
-		r.POST("/passkeys/registration/initialize", wallet.InitializeRegistrationHandler(endpoint))
+		// POST /passkeys/registration/initialize
+		{
+			endpoint := wallet.InitializeRegistrationEndpoint(svc)
+			api.POST("/passkeys/registration/initialize", wallet.InitializeRegistrationHandler(endpoint))
+		}
+
+		// POST /passkeys/registration/finalize
+		{
+			endpoint := wallet.FinalizeRegistrationEndpoint(svc)
+			api.POST("/passkeys/registration/finalize", wallet.FinalizeRegistrationHandler(endpoint))
+		}
+
+		// POST /passkeys/login/initialize
+		{
+			endpoint := wallet.InitializeLoginEndpoint(svc)
+			api.POST("/passkeys/login/initialize", wallet.InitializeLoginHandler(endpoint))
+		}
+
+		// POST /passkeys/login/finalize
+		{
+			endpoint := wallet.FinalizeLoginEndpoint(svc)
+			api.POST("/passkeys/login/finalize", wallet.FinalizeLoginHandler(endpoint))
+		}
 	}
 
-	// POST /passkeys/registration/finalize
-	{
-		endpoint := wallet.FinalizeRegistrationEndpoint(svc)
-		r.POST("/passkeys/registration/finalize", wallet.FinalizeRegistrationHandler(endpoint))
-	}
-
-	// POST /passkeys/login/initialize
-	{
-		endpoint := wallet.InitializeLoginEndpoint(svc)
-		r.POST("/passkeys/login/initialize", wallet.InitializeLoginHandler(endpoint))
-	}
-
-	// POST /passkeys/login/finalize
-	{
-		endpoint := wallet.FinalizeLoginEndpoint(svc)
-		r.POST("/passkeys/login/finalize", wallet.FinalizeLoginHandler(endpoint))
-	}
+	r.StaticFS("/app", gin.Dir("./app/dist/app/browser", false))
+	r.NoRoute(func(c *gin.Context) {
+		c.File("./app/dist/app/browser/index.html")
+	})
 
 	port := cli.Int("port")
 	go r.Run(":" + strconv.Itoa(port))
