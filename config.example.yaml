@@ -1,8 +1,13 @@
-passkeys:
-  baseURL: https://passkeys.hanko.io
-  tenantID: 00000000-0000-0000-0000-000000000000
-  api:
-    id: 00000000-0000-0000-0000-000000000000
-    secret: 
-  origins:
-  - https://wallet.flarex.io
+providers:
+  google:
+    client: 
+      id: google_client_id
+      secret: google_client_secret
+  passkeys:
+    baseURL: https://passkeys.hanko.io
+    tenantID: 00000000-0000-0000-0000-000000000000
+    api:
+      id: 00000000-0000-0000-0000-000000000000
+      secret: 
+    origins:
+    - https://wallet.flarex.io

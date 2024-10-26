@@ -46,13 +46,12 @@ type WalletService interface {
 }
 
 func NewService(cfg Config) Service {
-	baseURL := cfg.PasskeysConfig.BaseURL + "/" + cfg.PasskeysConfig.TenantID
-	apiSecret := cfg.PasskeysConfig.PasskeyAPI.Secret
+	passkeys := cfg.Providers.Passkeys
 
 	client := resty.New().
 		SetHeader("Content-Type", "application/json").
-		SetHeader("apiKey", apiSecret).
-		SetBaseURL(baseURL)
+		SetHeader("apiKey", passkeys.PasskeyAPI.Secret).
+		SetBaseURL(passkeys.BaseURL + "/" + passkeys.TenantID)
 
 	return &service{cfg, client}
 }

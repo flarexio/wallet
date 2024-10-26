@@ -82,7 +82,7 @@ func run(cli *cli.Context) error {
 	r.GET("/.well-known/webauthn", func(c *gin.Context) {
 		origins := struct {
 			Origins []string `json:"origins"`
-		}{Origins: cfg.PasskeysConfig.Origins}
+		}{Origins: cfg.Providers.Passkeys.Origins}
 
 		c.JSON(http.StatusOK, origins)
 	})
