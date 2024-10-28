@@ -2,6 +2,12 @@
   flex: 1 1 auto;
 }
 
+.avatar-image {
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
 .wallet-card {
   width: 80%;
   height: 400px;

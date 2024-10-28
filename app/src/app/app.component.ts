@@ -1,6 +1,7 @@
-import { Component, HostListener } from '@angular/core';
+import { JsonPipe } from '@angular/common';
+import { Component, ChangeDetectorRef, HostListener } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { Observable, catchError, concatMap, from, map } from 'rxjs';
+import { Observable, catchError, concatMap, from } from 'rxjs';
 import * as jose from 'jose';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -8,10 +9,10 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { environment as env } from '../environments/environment';
-import { IdentityService } from './identity.service';
-import { PasskeysService } from './passkeys.service';
+import { IdentityService, User } from './identity.service';
 
 declare var google: any;
 
@@ -19,40 +20,42 @@ declare var google: any;
   selector: 'app-root',
   standalone: true,
   imports: [
+    JsonPipe,
     RouterOutlet,
     MatButtonModule,
     MatCardModule,
     MatIconModule,
     MatSidenavModule,
     MatToolbarModule,
+    MatTooltipModule,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
 })
 export class AppComponent {
   title = 'app';
-  name: string | undefined = undefined;
-  message = '';
+
+  user: User | undefined = undefined;
 
   constructor(
+    private ref: ChangeDetectorRef,
     private identityService: IdentityService,
-    private passkeysService: PasskeysService,
   ) {
     let token = localStorage.getItem('token');
     if (token == null) return;
 
-    from(jose.jwtVerify(token, this.passkeysService.JWKS, 
+    from(jose.jwtVerify(token, this.identityService.JWKS, 
       { audience: 'wallet.flarex.io' }
     )).pipe(
-      map(({ payload }) => payload),
+      concatMap(() => this.identityService.signin('passkeys', token)),
       catchError((e) => {
         console.error(e);
 
-        localStorage.removeItem('token');
+        localStorage.removeItem('passkeys');
         return this.login();
       }),
     ).subscribe({
-      next: (payload) => this.name = payload.sub,
+      next: (user) => this.user = user,
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })
@@ -82,42 +85,34 @@ export class AppComponent {
 
   handleCredentialResponse(response: any) {
     const token: string = response.credential;
-    console.log("Encoded JWT ID token: " + token);
+    console.log("Google token: " + token);
 
-    this.identityService.signInWithGoogle(token).subscribe({
-      next: (user) => console.log(user),
+    this.identityService.signin('google', token).subscribe({
+      next: (user) => this.user = user,
       error: (err) => console.error(err),
-      complete: () => console.log('complete'),
+      complete: () => this.ref.detectChanges(),
     })
   }
 
   @HostListener('window:message', ['$event'])
   messageHandler($event: MessageEvent) {
     console.log($event);
-
-    this.message = `${$event.data.message} (${$event.data.count})`;
-    if ($event.data.count > 10) {
-      window.close();
-    }
   }
 
-  login(): Observable<jose.JWTPayload> {
-    return this.passkeysService.directPasskeyLogin().pipe(
+  login(): Observable<User> {
+    return this.identityService.directPasskeyLogin().pipe(
       concatMap((token) => {
-        localStorage.setItem('token', token);
+        console.log("Passkeys token: " + token);
+        localStorage.setItem('passkeys', token);
 
-        return from(jose.jwtVerify(token, this.passkeysService.JWKS, 
-          { audience: 'wallet.flarex.io' }
-        )).pipe(
-          map(({ payload }) => payload)
-        )
+        return this.identityService.signin('passkeys', token);
       })
     );
   }
 
   loginHandler() {
     this.login().subscribe({
-      next: (payload) => this.name = payload.sub,
+      next: (user) => this.user = user,
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })

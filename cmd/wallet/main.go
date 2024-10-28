@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -13,9 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
-
-	"github.com/flarexio/wallet"
 )
 
 func main() {
@@ -47,72 +43,13 @@ func main() {
 }
 
 func run(cli *cli.Context) error {
-	path := cli.String("path")
-	if path == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-
-		path = homeDir + "/.flarex/wallet"
-	}
-
-	f, err := os.Open(path + "/config.yaml")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var cfg wallet.Config
-	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
-		return err
-	}
-
 	log, err := zap.NewDevelopment()
 	if err != nil {
 		return err
 	}
 	defer log.Sync()
 
-	svc := wallet.NewService(cfg)
-
 	r := gin.Default()
-
-	// GET /.well-known/webauthn
-	r.GET("/.well-known/webauthn", func(c *gin.Context) {
-		origins := struct {
-			Origins []string `json:"origins"`
-		}{Origins: cfg.Providers.Passkeys.Origins}
-
-		c.JSON(http.StatusOK, origins)
-	})
-
-	passkeys := r.Group("/passkeys")
-	{
-		// POST /registration/initialize
-		{
-			endpoint := wallet.InitializeRegistrationEndpoint(svc)
-			passkeys.POST("/registration/initialize", wallet.InitializeRegistrationHandler(endpoint))
-		}
-
-		// POST /registration/finalize
-		{
-			endpoint := wallet.FinalizeRegistrationEndpoint(svc)
-			passkeys.POST("/registration/finalize", wallet.FinalizeRegistrationHandler(endpoint))
-		}
-
-		// POST /login/initialize
-		{
-			endpoint := wallet.InitializeLoginEndpoint(svc)
-			passkeys.POST("/login/initialize", wallet.InitializeLoginHandler(endpoint))
-		}
-
-		// POST /login/finalize
-		{
-			endpoint := wallet.FinalizeLoginEndpoint(svc)
-			passkeys.POST("/login/finalize", wallet.FinalizeLoginHandler(endpoint))
-		}
-	}
 
 	r.StaticFS("/app", gin.Dir("./app/dist/app/browser", false))
 	r.NoRoute(func(c *gin.Context) {

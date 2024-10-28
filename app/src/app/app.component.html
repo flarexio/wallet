@@ -2,7 +2,7 @@
   <header>
     <mat-toolbar>
       <span class="spacer"></span>
-      @if (name == undefined) {
+      @if (user == undefined) {
         <!-- Sign in with Google -->
         <div id="googleSignIn"></div> 
 
@@ -14,7 +14,9 @@
           Passkey
         </button>
       } @else {
-        <button mat-button>{{ name }}</button>
+        <button mat-icon-button [matTooltip]="user.name">
+          <img class="avatar-image" [src]="user.avatar">
+        </button>
       }
     </mat-toolbar>
   </header>
