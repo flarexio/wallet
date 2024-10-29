@@ -18,6 +18,9 @@ export class IdentityService {
 
   private baseURL = env.FLAREX_IDENTITY_BASEURL + '/identity/v1';
 
+  private _currentUser: User | undefined;
+  private _currentToken: Token | undefined;
+
   constructor(
     private http: HttpClient,
   ) { }
@@ -29,23 +32,43 @@ export class IdentityService {
     };
 
     return this.http.patch(`${this.baseURL}/signin`, params).pipe(
-      map((raw) => Object.assign(new User(), raw)),
+      map((raw: any) => {
+        const user = Object.assign(new User(), raw.user);
+        const token = Object.assign(new Token(), raw.token);
+
+        this.currentUser = user;
+        this.currentToken = token;
+        return user;
+      }),
     );
   }
 
-  registerPasskey(user_id: string, username: string): Observable<string> {
-    return this.http.post(`${this.baseURL}/passkeys/registration/initialize`, { user_id, username }).pipe(
+  registerPasskey(): Observable<User> {
+    if (this.currentUser == undefined) {
+      throw new Error('user not found');
+    }
+
+    const id = this.currentUser.id;
+
+    if (this.currentToken == undefined) {
+      throw new Error('token not found');
+    }
+
+    const headers = { 'Authorization': `Bearer ${this.currentToken.token}` };
+
+    return this.http.post(`${this.baseURL}/users/${id}/passkeys/register`, null, { headers }).pipe(
       concatMap((opts) => create(opts as CredentialCreationOptionsJSON)),
-      concatMap((credential) => this.http.post(`${this.baseURL}/passkeys/registration/finalize`, credential)),
-      map((result: any) => result.token),
-    );
-  }
+      concatMap((credential) => this.http.post(`${this.baseURL}/passkeys/registration`, credential)),
+      concatMap((token) => this.http.post(`${this.baseURL}/users/${id}/socials`, {
+        'credential': token,
+        'provider': 'passkeys',
+      }, { headers })),
+      map((raw) => {
+        const user = Object.assign(new User(), raw);
 
-  loginWithPasskey(user_id: string): Observable<string> {
-    return this.http.post(`${this.baseURL}/passkeys/login/initialize`, { user_id }).pipe(
-      concatMap((opts) => get(opts as CredentialRequestOptionsJSON)),
-      concatMap((credential) => this.http.post(`${this.baseURL}/passkeys/login/finalize`, credential)),
-      map((result: any) => result.token),
+        this.currentUser = user;
+        return user;
+      }),
     );
   }
 
@@ -55,6 +78,20 @@ export class IdentityService {
       concatMap((credential) => this.http.post(`${env.PASSKEYS_BASEURL}/login/finalize`, credential)),
       map((result: any) => result.token),
     );
+  }
+
+  public get currentUser(): User | undefined {
+    return this._currentUser;
+  }
+  public set currentUser(user: User | undefined) {
+    this._currentUser = user;
+  }
+
+  public get currentToken(): Token | undefined {
+    return this._currentToken;
+  }
+  public set currentToken(token: Token | undefined) {
+    this._currentToken = token;
   }
 }
 
@@ -67,7 +104,6 @@ export class User {
   public avatar: string = '';
 
   private _accounts: SocialAccount[] = [];
-  private _token: Token | undefined;
 
   public get accounts(): SocialAccount[] {
       return this._accounts;
@@ -81,17 +117,6 @@ export class User {
       }
 
       this._accounts = accounts;
-  }
-
-  public get token(): Token | undefined {
-      return this._token;
-  }
-  public set token(value: Token | undefined) {
-      if (value == undefined) {
-          this._token = undefined;
-      } else {
-          this._token = Object.assign(new Token(), value);
-      }
   }
 }
 

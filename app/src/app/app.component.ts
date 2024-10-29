@@ -7,6 +7,7 @@ import * as jose from 'jose';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -25,6 +26,7 @@ declare var google: any;
     MatButtonModule,
     MatCardModule,
     MatIconModule,
+    MatMenuModule,
     MatSidenavModule,
     MatToolbarModule,
     MatTooltipModule,
@@ -113,6 +115,14 @@ export class AppComponent {
   loginHandler() {
     this.login().subscribe({
       next: (user) => this.user = user,
+      error: (err) => console.error(err),
+      complete: () => console.log('complete'),
+    })
+  }
+
+  registerPasskey() {
+    this.identityService.registerPasskey().subscribe({
+      next: (token) => console.log(token),
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })

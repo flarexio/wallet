@@ -14,9 +14,20 @@
           Passkey
         </button>
       } @else {
-        <button mat-icon-button [matTooltip]="user.name">
-          <img class="avatar-image" [src]="user.avatar">
+        <button mat-button extended [matMenuTriggerFor]="menu">
+          <mat-icon>
+            <img class="avatar-image" [src]="user.avatar">
+          </mat-icon>
+          {{ user.username }}
         </button>
+        <mat-menu #menu="matMenu">
+          <button mat-menu-item (click)="registerPasskey()">
+            <mat-icon fontSet="material-symbols-outlined">
+              passkey
+            </mat-icon>
+            Register Passkey
+          </button>
+        </mat-menu>
       }
     </mat-toolbar>
   </header>
