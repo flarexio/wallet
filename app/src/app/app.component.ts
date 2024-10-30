@@ -5,6 +5,7 @@ import { Observable, catchError, concatMap, from } from 'rxjs';
 import * as jose from 'jose';
 
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -24,6 +25,7 @@ declare var google: any;
     JsonPipe,
     RouterOutlet,
     MatButtonModule,
+    MatButtonToggleModule,
     MatCardModule,
     MatIconModule,
     MatMenuModule,
@@ -39,11 +41,15 @@ export class AppComponent {
 
   user: User | undefined = undefined;
 
+  lastSigninMethod: string | null = null;
+
   constructor(
     private ref: ChangeDetectorRef,
     private identityService: IdentityService,
   ) {
-    let token = localStorage.getItem('token');
+    this.lastSigninMethod = localStorage.getItem('last-signin-method');
+
+    let token = localStorage.getItem('passkeys-token');
     if (token == null) return;
 
     from(jose.jwtVerify(token, this.identityService.JWKS, 
@@ -53,11 +59,14 @@ export class AppComponent {
       catchError((e) => {
         console.error(e);
 
-        localStorage.removeItem('passkeys');
+        localStorage.removeItem('passkeys-token');
         return this.login();
       }),
     ).subscribe({
-      next: (user) => this.user = user,
+      next: (user) => {
+        this.user = user;
+        localStorage.setItem('last-signin-method', 'passkeys');
+      },
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })
@@ -76,13 +85,15 @@ export class AppComponent {
         type: "standard",
         theme: "outline", 
         size: "large",
-        text: "continue_with",
-        shape: "rectangular",
+        text: "signin_with",
+        shape: "circle",
         logo_alignment: "left"
       }
     );
 
-    google.accounts.id.prompt();
+    if (this.lastSigninMethod != 'passkeys') {
+      google.accounts.id.prompt();
+    }
   }
 
   handleCredentialResponse(response: any) {
@@ -90,7 +101,10 @@ export class AppComponent {
     console.log("Google token: " + token);
 
     this.identityService.signin('google', token).subscribe({
-      next: (user) => this.user = user,
+      next: (user) => {
+        this.user = user;
+        localStorage.setItem('last-signin-method', 'google');
+      },
       error: (err) => console.error(err),
       complete: () => this.ref.detectChanges(),
     })
@@ -105,7 +119,7 @@ export class AppComponent {
     return this.identityService.directPasskeyLogin().pipe(
       concatMap((token) => {
         console.log("Passkeys token: " + token);
-        localStorage.setItem('passkeys', token);
+        localStorage.setItem('passkeys-token', token);
 
         return this.identityService.signin('passkeys', token);
       })
@@ -114,7 +128,10 @@ export class AppComponent {
 
   loginHandler() {
     this.login().subscribe({
-      next: (user) => this.user = user,
+      next: (user) => {
+        this.user = user;
+        localStorage.setItem('last-signin-method', 'passkeys');
+      },
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })
@@ -122,7 +139,7 @@ export class AppComponent {
 
   registerPasskey() {
     this.identityService.registerPasskey().subscribe({
-      next: (token) => console.log(token),
+      next: (user) => console.log(user),
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })

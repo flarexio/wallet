@@ -1,34 +1,57 @@
 <mat-drawer-container fullscreen>
   <header>
     <mat-toolbar>
+    @if (user == undefined) {
       <span class="spacer"></span>
-      @if (user == undefined) {
-        <!-- Sign in with Google -->
-        <div id="googleSignIn"></div> 
 
-        <!-- Sign in with a passkey -->
-        <button mat-button extended (click)="loginHandler()">
+      <!-- Sign in with Google -->
+      <div id="googleSignIn"></div> 
+
+      <!-- Sign in with a passkey -->
+      <button mat-icon-button (click)="loginHandler()">
+        <mat-icon fontSet="material-symbols-outlined">
+          passkey
+        </mat-icon>
+      </button>
+    } @else {
+      <mat-button-toggle-group hideSingleSelectionIndicator value="cloud">
+        <mat-button-toggle value="cloud">
+          Cloud
+        </mat-button-toggle>
+        <mat-button-toggle value="edge" disabled>
+          Edge
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <span class="spacer"></span>
+
+      <button mat-button [matMenuTriggerFor]="menu">
+        <mat-icon>
+          <img class="avatar-image" [src]="user.avatar">
+        </mat-icon>
+        {{ user.username }}
+      </button>
+      <mat-menu #menu="matMenu" yPosition="below">
+        <button mat-menu-item disabled>
+          <mat-icon>
+            person
+          </mat-icon>
+          Profile
+        </button>
+        <button mat-menu-item disabled>
+          <mat-icon>
+            logout
+          </mat-icon>
+          Logout
+        </button>
+        <button mat-menu-item (click)="registerPasskey()">
           <mat-icon fontSet="material-symbols-outlined">
             passkey
           </mat-icon>
-          Passkey
+          Register Passkey
         </button>
-      } @else {
-        <button mat-button extended [matMenuTriggerFor]="menu">
-          <mat-icon>
-            <img class="avatar-image" [src]="user.avatar">
-          </mat-icon>
-          {{ user.username }}
-        </button>
-        <mat-menu #menu="matMenu">
-          <button mat-menu-item (click)="registerPasskey()">
-            <mat-icon fontSet="material-symbols-outlined">
-              passkey
-            </mat-icon>
-            Register Passkey
-          </button>
-        </mat-menu>
-      }
+      </mat-menu>
+    }
     </mat-toolbar>
   </header>
 
@@ -46,4 +69,6 @@
   </mat-card>
 </mat-drawer-container>
 
-<div id="g_id_onload"></div>
+@if (lastSigninMethod != 'passkeys') {
+  <div id="g_id_onload"></div>
+}

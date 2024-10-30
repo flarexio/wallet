@@ -1,0 +1,6 @@
+keys:
+  google:
+    projectID: flarex-439501
+    location: global
+    keyRing: wallet
+    key: main
