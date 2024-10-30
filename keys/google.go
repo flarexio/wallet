@@ -6,6 +6,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"strconv"
+	"strings"
 	"sync"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
@@ -55,7 +57,7 @@ type googleKeyService struct {
 	sync.RWMutex
 }
 
-func (svc *googleKeyService) FindKeyVersion(v ...int) (*kmspb.CryptoKeyVersion, error) {
+func (svc *googleKeyService) Key(v ...int) (Key, error) {
 	count := len(svc.keyVersions)
 	if count == 0 {
 		return nil, errors.New("key empty")
@@ -63,25 +65,56 @@ func (svc *googleKeyService) FindKeyVersion(v ...int) (*kmspb.CryptoKeyVersion, 
 
 	ver := count - 1
 	if len(v) > 0 {
-		ver = v[0]
+		ver = v[0] - 1
 	}
 
-	if ver > count {
-		return nil, errors.New("key version not found")
+	if ver < 0 {
+		return nil, errors.New("invalid version")
+	}
+
+	if ver >= count {
+		return nil, errors.New("key not found")
 	}
 
 	svc.RLock()
 	defer svc.RUnlock()
 
-	return svc.keyVersions[ver], nil
+	keyVersion := svc.keyVersions[ver]
+
+	return &googleKey{
+		CryptoKeyVersion: keyVersion,
+		client:           svc.client,
+	}, nil
 }
 
 func (svc *googleKeyService) Signature(data []byte, ver ...int) ([]byte, error) {
-	key, err := svc.FindKeyVersion(ver...)
+	key, err := svc.Key(ver...)
 	if err != nil {
 		return nil, err
 	}
 
+	return key.Signature(data)
+}
+
+func (svc *googleKeyService) Verify(data []byte, sig []byte, ver ...int) (bool, error) {
+	key, err := svc.Key(ver...)
+	if err != nil {
+		return false, err
+	}
+
+	return key.Verify(data, sig)
+}
+
+func (svc *googleKeyService) Close() error {
+	return svc.client.Close()
+}
+
+type googleKey struct {
+	*kmspb.CryptoKeyVersion
+	client *kms.KeyManagementClient
+}
+
+func (key *googleKey) Signature(data []byte) ([]byte, error) {
 	var req *kmspb.AsymmetricSignRequest
 	switch key.Algorithm {
 	case kmspb.CryptoKeyVersion_EC_SIGN_ED25519:
@@ -95,7 +128,7 @@ func (svc *googleKeyService) Signature(data []byte, ver ...int) ([]byte, error) 
 	}
 
 	ctx := context.Background()
-	resp, err := svc.client.AsymmetricSign(ctx, req)
+	resp, err := key.client.AsymmetricSign(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -107,14 +140,9 @@ func (svc *googleKeyService) Signature(data []byte, ver ...int) ([]byte, error) 
 	return resp.Signature, nil
 }
 
-func (svc *googleKeyService) Verify(data, signature []byte, ver ...int) (bool, error) {
-	key, err := svc.FindKeyVersion(ver...)
-	if err != nil {
-		return false, err
-	}
-
+func (key *googleKey) Verify(data []byte, sig []byte) (bool, error) {
 	ctx := context.Background()
-	resp, err := svc.client.GetPublicKey(ctx, &kmspb.GetPublicKeyRequest{
+	resp, err := key.client.GetPublicKey(ctx, &kmspb.GetPublicKeyRequest{
 		Name: key.Name,
 	})
 	if err != nil {
@@ -131,15 +159,25 @@ func (svc *googleKeyService) Verify(data, signature []byte, ver ...int) (bool, e
 		return false, err
 	}
 
-	switch publicKey := pub.(type) {
+	switch key := pub.(type) {
 	case ed25519.PublicKey:
-		return ed25519.Verify(publicKey, data, signature), nil
+		return ed25519.Verify(key, data, sig), nil
 
 	default:
 		return false, errors.New("unsupported algorithm")
 	}
 }
 
-func (svc *googleKeyService) Close() error {
-	return svc.client.Close()
+func (key *googleKey) Version() int {
+	parts := strings.Split(key.Name, "/")
+	if len(parts) < 10 {
+		return 0
+	}
+
+	ver, err := strconv.Atoi(parts[9])
+	if err != nil {
+		return 0
+	}
+
+	return ver
 }

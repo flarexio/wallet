@@ -33,13 +33,22 @@ func TestGoogleKeyService(t *testing.T) {
 	}
 	defer svc.Close()
 
-	data := []byte("test")
-
-	sign, err := svc.Signature(data)
+	key, err := svc.Key()
 	if err != nil {
 		assert.Fail(err.Error())
 		return
 	}
 
-	assert.True(svc.Verify(data, sign))
+	assert.Equal(1, key.Version())
+
+	data := []byte("test")
+
+	sig, err := key.Signature(data)
+	if err != nil {
+		assert.Fail(err.Error())
+		return
+	}
+
+	assert.Len(sig, 64)
+	assert.True(key.Verify(data, sig))
 }
