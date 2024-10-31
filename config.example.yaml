@@ -4,3 +4,16 @@ keys:
     location: global
     keyRing: wallet
     key: main
+
+persistences:
+  cache:
+    enabled: true
+    name: wallets
+    # path: 
+    # inmem: false
+  main:
+    enabled: false
+    rpc: https://api.devnet.solana.com
+    program: fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL
+    # path: 
+    account: id.json

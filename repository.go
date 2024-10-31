@@ -7,7 +7,7 @@ var (
 )
 
 type Repository interface {
-	Save(wallet *Wallet) error
-
+	Save(w *Wallet) error
 	FindBySubject(subject string) (*Wallet, error)
+	Close() error
 }

@@ -2,16 +2,19 @@ package wallet
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/google/uuid"
 
+	"github.com/flarexio/core/model"
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/keys"
 )
 
 type Service interface {
 	Wallet(subject string) (solana.PublicKey, error)
+	Close() error
 }
 
 func NewService(wallets Repository, cfg conf.Config) (Service, error) {
@@ -52,6 +55,10 @@ func (svc *service) findOrCreate(subject string) (*Wallet, error) {
 		Salt:       salt,
 		KeyVersion: key.Version(),
 		PrivateKey: sig,
+		Model: model.Model{
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
 	}
 
 	return w, nil
@@ -77,4 +84,8 @@ func (svc *service) Wallet(subject string) (solana.PublicKey, error) {
 	}
 
 	return wallet.PublicKey(), nil
+}
+
+func (svc *service) Close() error {
+	return svc.keys.Close()
 }

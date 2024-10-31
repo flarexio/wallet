@@ -12,6 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
+
+	"github.com/flarexio/wallet"
+	"github.com/flarexio/wallet/conf"
+	"github.com/flarexio/wallet/persistence"
 )
 
 func main() {
@@ -43,13 +48,54 @@ func main() {
 }
 
 func run(cli *cli.Context) error {
+	path := cli.String("path")
+	if path == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+
+		path = homeDir + "/.flarex/wallet"
+	}
+
+	conf.Path = path
+
+	f, err := os.Open(conf.Path + "/config.yaml")
+	if err != nil {
+		return err
+	}
+
+	var cfg conf.Config
+	err = yaml.NewDecoder(f).Decode(&cfg)
+	if err != nil {
+		return err
+	}
+
 	log, err := zap.NewDevelopment()
 	if err != nil {
 		return err
 	}
 	defer log.Sync()
 
+	repo, err := persistence.NewWalletRepository(cfg.Persistences)
+	if err != nil {
+		return err
+	}
+	defer repo.Close()
+
+	svc, err := wallet.NewService(repo, cfg)
+	if err != nil {
+		return err
+	}
+	defer svc.Close()
+
 	r := gin.Default()
+
+	// POST /wallets
+	{
+		endpoint := wallet.WalletEndpoint(svc)
+		r.POST("/wallets", wallet.WalletHandler(endpoint))
+	}
 
 	r.StaticFS("/app", gin.Dir("./app/dist/app/browser", false))
 	r.NoRoute(func(c *gin.Context) {
