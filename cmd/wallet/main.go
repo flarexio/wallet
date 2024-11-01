@@ -17,6 +17,10 @@ import (
 	"github.com/flarexio/wallet"
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/persistence"
+
+	"github.com/flarexio/identity/policy"
+
+	identityHTTP "github.com/flarexio/identity/transport/http"
 )
 
 func main() {
@@ -77,7 +81,7 @@ func run(cli *cli.Context) error {
 	}
 	defer log.Sync()
 
-	repo, err := persistence.NewWalletRepository(cfg.Persistences)
+	repo, err := persistence.NewAccountRepository(cfg.Persistence)
 	if err != nil {
 		return err
 	}
@@ -91,10 +95,25 @@ func run(cli *cli.Context) error {
 
 	r := gin.Default()
 
-	// POST /wallets
+	identityHTTP.Init(
+		cfg.Identity.BaseURL,
+		cfg.Identity.JWT.Audiences[0],
+		cfg.Identity.JWT.Secret,
+	)
+
+	ctx := context.Background()
+	policy, err := policy.NewRegoPolicy(ctx, conf.Path)
+	if err != nil {
+		return err
+	}
+
+	auth := identityHTTP.Authorizator(policy)
+
+	// GET /wallets/:user
 	{
 		endpoint := wallet.WalletEndpoint(svc)
-		r.POST("/wallets", wallet.WalletHandler(endpoint))
+		r.GET("/wallets/:user", auth("wallet::accounts.get", identityHTTP.Owner),
+			wallet.WalletHandler(endpoint))
 	}
 
 	r.StaticFS("/app", gin.Dir("./app/dist/app/browser", false))

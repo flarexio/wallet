@@ -6,11 +6,11 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 
-	"github.com/flarexio/wallet"
+	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/conf"
 )
 
-func NewBadgerWalletRepository(cfg conf.CacheConfig) (wallet.Repository, error) {
+func NewBadgerAccountRepository(cfg *conf.BadgerPersistenceConfig) (account.Repository, error) {
 	opts := badger.DefaultOptions(cfg.Path + "/" + cfg.Name)
 	if cfg.InMem {
 		opts = badger.DefaultOptions("").WithInMemory(true)
@@ -21,17 +21,17 @@ func NewBadgerWalletRepository(cfg conf.CacheConfig) (wallet.Repository, error) 
 		return nil, err
 	}
 
-	return &badgerWalletRepository{db}, nil
+	return &badgerAccountRepository{db}, nil
 }
 
-type badgerWalletRepository struct {
+type badgerAccountRepository struct {
 	db *badger.DB
 }
 
-func (repo *badgerWalletRepository) Save(w *wallet.Wallet) error {
-	key := []byte("sub:" + w.Subject)
+func (repo *badgerAccountRepository) Save(a *account.Account) error {
+	key := []byte("sub:" + a.Subject)
 
-	bs, err := json.Marshal(w)
+	bs, err := json.Marshal(a)
 	if err != nil {
 		return err
 	}
@@ -41,8 +41,8 @@ func (repo *badgerWalletRepository) Save(w *wallet.Wallet) error {
 	})
 }
 
-func (repo *badgerWalletRepository) FindBySubject(subject string) (*wallet.Wallet, error) {
-	var w *wallet.Wallet
+func (repo *badgerAccountRepository) FindBySubject(subject string) (*account.Account, error) {
+	var a *account.Account
 
 	key := []byte("sub:" + subject)
 
@@ -50,23 +50,23 @@ func (repo *badgerWalletRepository) FindBySubject(subject string) (*wallet.Walle
 		item, err := txn.Get(key)
 		if err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
-				return wallet.ErrWalletNotFound
+				return account.ErrAccountNotFound
 			}
 
 			return err
 		}
 
 		return item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &w)
+			return json.Unmarshal(val, &a)
 		})
 	}); err != nil {
 		return nil, err
 	}
 
-	return w, nil
+	return a, nil
 }
 
-func (repo *badgerWalletRepository) Close() error {
+func (repo *badgerAccountRepository) Close() error {
 	if repo.db != nil {
 		return repo.db.Close()
 	}

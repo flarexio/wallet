@@ -6,11 +6,11 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 
-	"github.com/flarexio/wallet"
+	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/conf"
 )
 
-func NewSolanaWalletRepository(cfg conf.MainConfig) (wallet.Repository, error) {
+func NewSolanaAccountRepository(cfg *conf.SolanaPersistenceConfig) (account.Repository, error) {
 	client := rpc.New(cfg.RPC)
 
 	path := cfg.Path + "/" + cfg.Account
@@ -25,23 +25,27 @@ func NewSolanaWalletRepository(cfg conf.MainConfig) (wallet.Repository, error) {
 		return nil, err
 	}
 
-	return &solanaWalletRepository{client, account, program}, nil
+	return &solanaAccountRepository{client, account, program}, nil
 }
 
-type solanaWalletRepository struct {
+type solanaAccountRepository struct {
 	client  *rpc.Client
 	account solana.PrivateKey
 	program solana.PublicKey
 }
 
-func (repo *solanaWalletRepository) Save(wallet *wallet.Wallet) error {
+func (repo *solanaAccountRepository) Save(a *account.Account) error {
 	return errors.New("not implemented")
 }
 
-func (repo *solanaWalletRepository) FindBySubject(subject string) (*wallet.Wallet, error) {
+func (repo *solanaAccountRepository) FindBySubject(subject string) (*account.Account, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (repo *solanaWalletRepository) Close() error {
-	return repo.client.Close()
+func (repo *solanaAccountRepository) Close() error {
+	if repo.client != nil {
+		return repo.client.Close()
+	}
+
+	return nil
 }

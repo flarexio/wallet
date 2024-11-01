@@ -11,8 +11,9 @@ var (
 )
 
 type Config struct {
-	Keys         KeyConfig         `yaml:"keys"`
-	Persistences PersistenceConfig `yaml:"persistences"`
+	Keys        KeyConfig         `yaml:"keys"`
+	Persistence PersistenceConfig `yaml:"persistence"`
+	Identity    IdentityConfig    `yaml:"identity"`
 }
 
 type KeyConfig struct {
@@ -31,31 +32,81 @@ func (key GoogleKeyConfig) Path() string {
 		key.ProjectID, key.Location, key.KeyRing, key.Key)
 }
 
+type PersistenceDriver int
+
+const (
+	PersistenceDriverBadger PersistenceDriver = iota
+	PersistenceDriverSolana
+	PersistenceDriverComposite
+)
+
+func ParsePersistenceDriver(value string) (PersistenceDriver, error) {
+	switch value {
+	case "badger":
+		return PersistenceDriverBadger, nil
+	case "solana":
+		return PersistenceDriverSolana, nil
+	case "composite":
+		return PersistenceDriverComposite, nil
+	default:
+		return -1, fmt.Errorf("unknown persistence driver")
+	}
+}
+
 type PersistenceConfig struct {
-	Cache CacheConfig `yaml:"cache"`
-	Main  MainConfig  `yaml:"main"`
+	Driver    PersistenceDriver
+	Badger    *BadgerPersistenceConfig
+	Solana    *SolanaPersistenceConfig
+	Composite *CompositePersistenceConfig
 }
 
-type CacheConfig struct {
-	Enabled bool
-	Name    string
-	Path    string
-	InMem   bool
-}
-
-func (cfg *CacheConfig) UnmarshalYAML(value *yaml.Node) error {
+func (cfg *PersistenceConfig) UnmarshalYAML(value *yaml.Node) error {
 	var raw struct {
-		Enabled bool   `yaml:"enabled"`
-		Name    string `yaml:"name"`
-		Path    string `yaml:"path"`
-		InMem   bool   `yaml:"inmem"`
+		Driver    string                      `yaml:"driver"`
+		Badger    *BadgerPersistenceConfig    `yaml:"badger"`
+		Solana    *SolanaPersistenceConfig    `yaml:"solana"`
+		Composite *CompositePersistenceConfig `yaml:"composite"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
 		return err
 	}
 
-	cfg.Enabled = raw.Enabled
+	driver, err := ParsePersistenceDriver(raw.Driver)
+	if err != nil {
+		return err
+	}
+
+	cfg.Driver = driver
+	cfg.Badger = raw.Badger
+	cfg.Solana = raw.Solana
+	cfg.Composite = raw.Composite
+
+	return nil
+}
+
+type CompositePersistenceConfig struct {
+	Main  PersistenceConfig `yaml:"main"`
+	Cache PersistenceConfig `yaml:"cache"`
+}
+
+type BadgerPersistenceConfig struct {
+	Name  string
+	Path  string
+	InMem bool
+}
+
+func (cfg *BadgerPersistenceConfig) UnmarshalYAML(value *yaml.Node) error {
+	var raw struct {
+		Name  string `yaml:"name"`
+		Path  string `yaml:"path"`
+		InMem bool   `yaml:"inmem"`
+	}
+
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+
 	cfg.Name = raw.Name
 	cfg.InMem = raw.InMem
 
@@ -67,17 +118,15 @@ func (cfg *CacheConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type MainConfig struct {
-	Enabled bool
+type SolanaPersistenceConfig struct {
 	RPC     string
 	Program string
 	Path    string
 	Account string
 }
 
-func (cfg *MainConfig) UnmarshalYAML(value *yaml.Node) error {
+func (cfg *SolanaPersistenceConfig) UnmarshalYAML(value *yaml.Node) error {
 	var raw struct {
-		Enabled bool   `yaml:"enabled"`
 		RPC     string `yaml:"rpc"`
 		Program string `yaml:"program"`
 		Path    string `yaml:"path"`
@@ -88,7 +137,6 @@ func (cfg *MainConfig) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
-	cfg.Enabled = raw.Enabled
 	cfg.RPC = raw.RPC
 	cfg.Program = raw.Program
 
@@ -98,6 +146,32 @@ func (cfg *MainConfig) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	cfg.Account = raw.Account
+
+	return nil
+}
+
+type IdentityConfig struct {
+	BaseURL string    `yaml:"baseURL"`
+	JWT     JWTConfig `yaml:"jwt"`
+}
+
+type JWTConfig struct {
+	Secret    []byte   `yaml:"secret"`
+	Audiences []string `yaml:"audiences"`
+}
+
+func (cfg *JWTConfig) UnmarshalYAML(value *yaml.Node) error {
+	var raw struct {
+		Secret    string   `yaml:"secret"`
+		Audiences []string `yaml:"audiences"`
+	}
+
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+
+	cfg.Secret = []byte(raw.Secret)
+	cfg.Audiences = raw.Audiences
 
 	return nil
 }

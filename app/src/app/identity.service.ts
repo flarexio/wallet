@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, concatMap, map } from 'rxjs';
+import { BehaviorSubject, Observable, concatMap, map } from 'rxjs';
 import * as jose from 'jose';
 
 import { 
@@ -21,6 +21,10 @@ export class IdentityService {
   private _currentUser: User | undefined;
   private _currentToken: Token | undefined;
 
+  private _userChangeSubject = new BehaviorSubject<User | undefined>(undefined);
+
+  public userChange = this._userChangeSubject.asObservable();
+
   constructor(
     private http: HttpClient,
   ) { }
@@ -33,11 +37,11 @@ export class IdentityService {
 
     return this.http.patch(`${this.baseURL}/signin`, params).pipe(
       map((raw: any) => {
-        const user = Object.assign(new User(), raw.user);
         const token = Object.assign(new Token(), raw.token);
+        const user = Object.assign(new User(), raw.user);
 
-        this.currentUser = user;
         this.currentToken = token;
+        this.currentUser = user;
         return user;
       }),
     );
@@ -48,7 +52,7 @@ export class IdentityService {
       throw new Error('user not found');
     }
 
-    const id = this.currentUser.id;
+    const user = this.currentUser.username;
 
     if (this.currentToken == undefined) {
       throw new Error('token not found');
@@ -56,10 +60,10 @@ export class IdentityService {
 
     const headers = { 'Authorization': `Bearer ${this.currentToken.token}` };
 
-    return this.http.post(`${this.baseURL}/users/${id}/passkeys/register`, null, { headers }).pipe(
+    return this.http.post(`${this.baseURL}/users/${user}/passkeys/register`, null, { headers }).pipe(
       concatMap((opts) => create(opts as CredentialCreationOptionsJSON)),
       concatMap((credential) => this.http.post(`${this.baseURL}/passkeys/registration`, credential)),
-      concatMap((token) => this.http.post(`${this.baseURL}/users/${id}/socials`, {
+      concatMap((token) => this.http.put(`${this.baseURL}/users/${user}/socials`, {
         'credential': token,
         'provider': 'passkeys',
       }, { headers })),
@@ -85,6 +89,7 @@ export class IdentityService {
   }
   public set currentUser(user: User | undefined) {
     this._currentUser = user;
+    this._userChangeSubject.next(user);
   }
 
   public get currentToken(): Token | undefined {

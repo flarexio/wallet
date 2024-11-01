@@ -1,49 +1,24 @@
 package persistence
 
 import (
-	"github.com/flarexio/wallet"
+	"errors"
+
+	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/conf"
 )
 
-func NewWalletRepository(cfg conf.PersistenceConfig) (wallet.Repository, error) {
-	var (
-		repo  wallet.Repository
-		cache wallet.Repository
-		main  wallet.Repository
-	)
+func NewAccountRepository(cfg conf.PersistenceConfig) (account.Repository, error) {
+	switch cfg.Driver {
+	case conf.PersistenceDriverBadger:
+		return NewBadgerAccountRepository(cfg.Badger)
 
-	if cfg.Cache.Enabled {
-		r, err := NewBadgerWalletRepository(cfg.Cache)
-		if err != nil {
-			return nil, err
-		}
+	case conf.PersistenceDriverSolana:
+		return NewSolanaAccountRepository(cfg.Solana)
 
-		cache = r
+	case conf.PersistenceDriverComposite:
+		return NewCompositeAccountRepository(cfg.Composite)
 
-		// If main is not enabled, use cache as the repository
-		if !cfg.Main.Enabled {
-			repo = cache
-		}
+	default:
+		return nil, errors.New("invalid persistence driver")
 	}
-
-	if cfg.Main.Enabled {
-		r, err := NewSolanaWalletRepository(cfg.Main)
-		if err != nil {
-			return nil, err
-		}
-
-		main = r
-
-		// If cache is not enabled, use main as the repository
-		if cache != nil {
-			repo = main
-		}
-	}
-
-	// If both cache and main are enabled, use the composite repository
-	if cache != nil && main != nil {
-		repo = NewCompositeWalletRepository(cache, main)
-	}
-
-	return repo, nil
 }

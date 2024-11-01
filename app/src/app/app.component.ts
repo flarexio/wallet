@@ -1,4 +1,4 @@
-import { JsonPipe } from '@angular/common';
+import { AsyncPipe, JsonPipe } from '@angular/common';
 import { Component, ChangeDetectorRef, HostListener } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { Observable, catchError, concatMap, from } from 'rxjs';
@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User } from './identity.service';
+import { WalletService } from './wallet.service';
 
 declare var google: any;
 
@@ -22,6 +23,7 @@ declare var google: any;
   selector: 'app-root',
   standalone: true,
   imports: [
+    AsyncPipe,
     JsonPipe,
     RouterOutlet,
     MatButtonModule,
@@ -37,15 +39,15 @@ declare var google: any;
   styleUrl: './app.component.scss'
 })
 export class AppComponent {
-  title = 'app';
-
   user: User | undefined = undefined;
-
   lastSigninMethod: string | null = null;
+
+  wallet: Observable<string> | undefined = undefined;
 
   constructor(
     private ref: ChangeDetectorRef,
     private identityService: IdentityService,
+    private walletService: WalletService,
   ) {
     this.lastSigninMethod = localStorage.getItem('last-signin-method');
 
@@ -69,7 +71,11 @@ export class AppComponent {
       },
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
-    })
+    });
+
+    this.identityService.userChange.subscribe((user) => {
+      this.wallet = user ? this.walletService.wallet() : undefined;
+    });
   }
 
   @HostListener('window:load', ['$event'])

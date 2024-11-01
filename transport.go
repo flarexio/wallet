@@ -9,14 +9,14 @@ import (
 
 func WalletHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req WalletRequest
-		if err := c.ShouldBind(&req); err != nil {
+		username := c.Param("user")
+		if username == "" {
 			c.Abort()
-			c.String(http.StatusBadRequest, err.Error())
+			c.String(http.StatusBadRequest, "user is required")
 			return
 		}
 
-		resp, err := endpoint(c, req)
+		resp, err := endpoint(c, username)
 		if err != nil {
 			c.Abort()
 			c.String(http.StatusExpectationFailed, err.Error())

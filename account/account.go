@@ -1,4 +1,4 @@
-package wallet
+package account
 
 import (
 	"crypto/ed25519"
@@ -8,7 +8,7 @@ import (
 	"github.com/flarexio/core/model"
 )
 
-type Wallet struct {
+type Account struct {
 	Subject    string
 	Salt       string
 	KeyVersion int
@@ -16,15 +16,11 @@ type Wallet struct {
 	model.Model
 }
 
-func (w *Wallet) PublicKey() solana.PublicKey {
-	pub, ok := w.PrivateKey.Public().(ed25519.PublicKey)
+func (a *Account) Wallet() solana.PublicKey {
+	pub, ok := a.PrivateKey.Public().(ed25519.PublicKey)
 	if !ok {
 		panic("invalid private key")
 	}
 
 	return solana.PublicKeyFromBytes(pub)
-}
-
-func (w *Wallet) Sign(data []byte) ([]byte, error) {
-	return ed25519.Sign(w.PrivateKey, data), nil
 }

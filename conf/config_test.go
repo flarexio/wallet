@@ -31,14 +31,20 @@ func TestConfig(t *testing.T) {
 	assert.Equal("wallet", cfg.Keys.Google.KeyRing)
 	assert.Equal("main", cfg.Keys.Google.Key)
 
-	assert.True(cfg.Persistences.Cache.Enabled)
-	assert.Equal("wallets", cfg.Persistences.Cache.Name)
-	assert.Equal(Path, cfg.Persistences.Cache.Path)
-	assert.False(cfg.Persistences.Cache.InMem)
+	assert.Equal(PersistenceDriverComposite, cfg.Persistence.Driver)
+	assert.NotNil(cfg.Persistence.Composite)
 
-	assert.False(cfg.Persistences.Main.Enabled)
-	assert.Equal("https://api.devnet.solana.com", cfg.Persistences.Main.RPC)
-	assert.Equal("fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL", cfg.Persistences.Main.Program)
-	assert.Equal(Path, cfg.Persistences.Main.Path)
-	assert.Equal("id.json", cfg.Persistences.Main.Account)
+	composite := cfg.Persistence.Composite
+	assert.Equal(PersistenceDriverBadger, composite.Cache.Driver)
+	assert.Equal("wallets", composite.Cache.Badger.Name)
+	assert.Equal(Path, composite.Cache.Badger.Path)
+	assert.False(composite.Cache.Badger.InMem)
+
+	assert.Equal(PersistenceDriverSolana, composite.Main.Driver)
+	assert.Equal("https://api.devnet.solana.com", composite.Main.Solana.RPC)
+	assert.Equal("fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL", composite.Main.Solana.Program)
+	assert.Equal(Path, composite.Main.Solana.Path)
+	assert.Equal("id.json", composite.Main.Solana.Account)
+
+	assert.Equal("identity.flarex.io", cfg.Identity.BaseURL)
 }

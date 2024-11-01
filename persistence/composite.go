@@ -1,41 +1,95 @@
 package persistence
 
-import "github.com/flarexio/wallet"
+import (
+	"errors"
 
-func NewCompositeWalletRepository(cache, main wallet.Repository) wallet.Repository {
-	return &compositeWalletRepository{cache, main}
-}
+	"github.com/flarexio/wallet/account"
+	"github.com/flarexio/wallet/conf"
+)
 
-type compositeWalletRepository struct {
-	cache wallet.Repository
-	main  wallet.Repository
-}
+func NewCompositeAccountRepository(cfg *conf.CompositePersistenceConfig) (account.Repository, error) {
+	var (
+		main  account.Repository
+		cache account.Repository
+	)
 
-func (repo *compositeWalletRepository) Save(wallet *wallet.Wallet) error {
-	go repo.cache.Save(wallet)
+	switch cfg.Main.Driver {
+	case conf.PersistenceDriverSolana:
+		repo, err := NewSolanaAccountRepository(cfg.Main.Solana)
+		if err != nil {
+			return nil, err
+		}
 
-	return repo.main.Save(wallet)
-}
+		main = repo
 
-func (repo *compositeWalletRepository) FindBySubject(subject string) (*wallet.Wallet, error) {
-	if w, err := repo.cache.FindBySubject(subject); err == nil {
-		return w, nil
+	case conf.PersistenceDriverBadger:
+		repo, err := NewBadgerAccountRepository(cfg.Main.Badger)
+		if err != nil {
+			return nil, err
+		}
+
+		main = repo
+
+	default:
+		return nil, errors.New("invalid main driver")
 	}
 
-	w, err := repo.main.FindBySubject(subject)
+	switch cfg.Cache.Driver {
+	case conf.PersistenceDriverBadger:
+		repo, err := NewBadgerAccountRepository(cfg.Cache.Badger)
+		if err != nil {
+			return nil, err
+		}
+
+		cache = repo
+
+	case conf.PersistenceDriverSolana:
+		return nil, errors.New("solana is not supported as cache driver")
+
+	default:
+		return nil, errors.New("invalid cache driver")
+	}
+
+	return &compositeAccountRepository{main, cache}, nil
+}
+
+type compositeAccountRepository struct {
+	main  account.Repository
+	cache account.Repository
+}
+
+func (repo *compositeAccountRepository) Save(a *account.Account) error {
+	err := repo.main.Save(a)
+	if err != nil {
+		return err
+	}
+
+	go repo.cache.Save(a)
+
+	return nil
+}
+
+func (repo *compositeAccountRepository) FindBySubject(subject string) (*account.Account, error) {
+	if a, err := repo.cache.FindBySubject(subject); err == nil {
+		return a, nil
+	}
+
+	a, err := repo.main.FindBySubject(subject)
 	if err != nil {
 		return nil, err
 	}
 
-	go repo.cache.Save(w)
+	go repo.cache.Save(a)
 
-	return w, nil
+	return a, nil
 }
 
-func (repo *compositeWalletRepository) Close() error {
+func (repo *compositeAccountRepository) Close() error {
+	err := repo.main.Close()
+
 	if repo.cache != nil {
 		repo.cache.Close()
 	}
 
-	return repo.main.Close()
+	return err
 }

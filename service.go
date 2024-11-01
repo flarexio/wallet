@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/flarexio/core/model"
+	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/keys"
 )
@@ -17,24 +18,24 @@ type Service interface {
 	Close() error
 }
 
-func NewService(wallets Repository, cfg conf.Config) (Service, error) {
+func NewService(repo account.Repository, cfg conf.Config) (Service, error) {
 	keysSvc, err := keys.NewGoogleKeysService(cfg.Keys.Google)
 	if err != nil {
 		return nil, err
 	}
 
 	return &service{
-		wallets: wallets,
-		keys:    keysSvc,
+		accounts: repo,
+		keys:     keysSvc,
 	}, nil
 }
 
 type service struct {
-	wallets Repository
-	keys    keys.Service
+	accounts account.Repository
+	keys     keys.Service
 }
 
-func (svc *service) findOrCreate(subject string) (*Wallet, error) {
+func (svc *service) findOrCreate(subject string) (*account.Account, error) {
 	// TODO: find wallet from solana
 
 	key, err := svc.keys.Key()
@@ -50,7 +51,7 @@ func (svc *service) findOrCreate(subject string) (*Wallet, error) {
 		return nil, err
 	}
 
-	w := &Wallet{
+	a := &account.Account{
 		Subject:    subject,
 		Salt:       salt,
 		KeyVersion: key.Version(),
@@ -61,29 +62,29 @@ func (svc *service) findOrCreate(subject string) (*Wallet, error) {
 		},
 	}
 
-	return w, nil
+	return a, nil
 }
 
 func (svc *service) Wallet(subject string) (solana.PublicKey, error) {
-	wallet, err := svc.wallets.FindBySubject(subject)
+	a, err := svc.accounts.FindBySubject(subject)
 	if err != nil {
-		if !errors.Is(err, ErrWalletNotFound) {
+		if !errors.Is(err, account.ErrAccountNotFound) {
 			return solana.PublicKey{}, err
 		}
 
-		w, err := svc.findOrCreate(subject)
+		newAccount, err := svc.findOrCreate(subject)
 		if err != nil {
 			return solana.PublicKey{}, err
 		}
 
-		if err := svc.wallets.Save(w); err != nil {
+		if err := svc.accounts.Save(newAccount); err != nil {
 			return solana.PublicKey{}, err
 		}
 
-		wallet = w
+		a = newAccount
 	}
 
-	return wallet.PublicKey(), nil
+	return a.Wallet(), nil
 }
 
 func (svc *service) Close() error {
