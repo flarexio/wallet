@@ -18,6 +18,7 @@ import (
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/persistence"
 
+	"github.com/flarexio/identity/passkeys"
 	"github.com/flarexio/identity/policy"
 
 	identityHTTP "github.com/flarexio/identity/transport/http"
@@ -81,13 +82,18 @@ func run(cli *cli.Context) error {
 	}
 	defer log.Sync()
 
+	passkeysSvc, err := passkeys.NewService(cfg.Passkeys)
+	if err != nil {
+		return err
+	}
+
 	repo, err := persistence.NewAccountRepository(cfg.Persistence)
 	if err != nil {
 		return err
 	}
 	defer repo.Close()
 
-	svc, err := wallet.NewService(repo, cfg)
+	svc, err := wallet.NewService(repo, passkeysSvc, cfg)
 	if err != nil {
 		return err
 	}
@@ -109,11 +115,34 @@ func run(cli *cli.Context) error {
 
 	auth := identityHTTP.Authorizator(policy)
 
-	// GET /wallets/:user
 	{
-		endpoint := wallet.WalletEndpoint(svc)
-		r.GET("/wallets/:user", auth("wallet::accounts.get", identityHTTP.Owner),
-			wallet.WalletHandler(endpoint))
+		// GET /wallets/:user
+		{
+			endpoint := wallet.WalletEndpoint(svc)
+			r.GET("/wallets/:user", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.WalletHandler(endpoint))
+		}
+
+		// POST /wallets/:user/sign/transaction
+		// {
+		// 	endpoint := wallet.SignTransactionEndpoint(svc)
+		// 	r.POST("/wallets/:user/sign/transaction", auth("wallet::accounts.get", identityHTTP.Owner),
+		// 		wallet.SignTransactionHandler(endpoint))
+		// }
+
+		// POST /wallets/:user/transaction/initialize
+		{
+			endpoint := wallet.InitializeTransactionEndpoint(svc)
+			r.POST("/wallets/:user/transaction/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.InitializeTransactionHandler(endpoint))
+		}
+
+		// POST /wallets/:user/transaction/finalize
+		{
+			endpoint := wallet.FinalizeTransactionEndpoint(svc)
+			r.POST("/wallets/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.FinalizeTransactionHandler(endpoint))
+		}
 	}
 
 	r.StaticFS("/app", gin.Dir("./app/dist/app/browser", false))

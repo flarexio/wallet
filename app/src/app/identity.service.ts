@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, concatMap, map } from 'rxjs';
+import { BehaviorSubject, Observable, concatMap, from, map } from 'rxjs';
 import * as jose from 'jose';
 
 import { 
@@ -20,10 +20,11 @@ export class IdentityService {
 
   private _currentUser: User | undefined;
   private _currentToken: Token | undefined;
+  private _currentPasskeyUserID: string | undefined;
 
   private _userChangeSubject = new BehaviorSubject<User | undefined>(undefined);
 
-  public userChange = this._userChangeSubject.asObservable();
+  userChange = this._userChangeSubject.asObservable();
 
   constructor(
     private http: HttpClient,
@@ -58,7 +59,8 @@ export class IdentityService {
       throw new Error('token not found');
     }
 
-    const headers = { 'Authorization': `Bearer ${this.currentToken.token}` };
+    const token = this.currentToken.token;
+    const headers = { 'Authorization': `Bearer ${token}` };
 
     return this.http.post(`${this.baseURL}/users/${user}/passkeys/register`, null, { headers }).pipe(
       concatMap((opts) => create(opts as CredentialCreationOptionsJSON)),
@@ -84,6 +86,18 @@ export class IdentityService {
     );
   }
 
+  verifyToken(token: string): Observable<jose.JWTPayload> {
+    return from(jose.jwtVerify(token, this.JWKS, {
+      audience: 'wallet.flarex.io'
+    })).pipe(
+      map(({ payload }) => { 
+        this.currentPasskeyUserID = payload.sub;
+
+        return payload;
+      })
+    )
+  }
+
   public get currentUser(): User | undefined {
     return this._currentUser;
   }
@@ -97,6 +111,13 @@ export class IdentityService {
   }
   public set currentToken(token: Token | undefined) {
     this._currentToken = token;
+  }
+
+  public get currentPasskeyUserID(): string | undefined {
+    return this._currentPasskeyUserID;
+  }
+  public set currentPasskeyUserID(userID: string | undefined) {
+    this._currentPasskeyUserID = userID;
   }
 }
 

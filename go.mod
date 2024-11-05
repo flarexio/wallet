@@ -6,10 +6,11 @@ require (
 	cloud.google.com/go/kms v1.20.1
 	github.com/dgraph-io/badger/v4 v4.3.1
 	github.com/flarexio/core v1.0.4
-	github.com/flarexio/identity v1.0.0
+	github.com/flarexio/identity v1.0.1-0.20241105144208-90a1fdd47536
 	github.com/gagliardetto/solana-go v1.11.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-kit/kit v0.13.0
+	github.com/go-webauthn/webauthn v0.11.2
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.5
@@ -56,7 +57,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.22.0 // indirect
 	github.com/go-resty/resty/v2 v2.15.3 // indirect
-	github.com/go-webauthn/webauthn v0.11.2 // indirect
 	github.com/go-webauthn/x v0.1.14 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect

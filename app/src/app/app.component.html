@@ -57,14 +57,21 @@
 
   <mat-card class="wallet-card">
     <mat-card-header>
-      <mat-card-title>Title</mat-card-title>
-      <mat-card-subtitle>{{ wallet | async }}</mat-card-subtitle>
+      <mat-card-title>{{ wallet | async }}</mat-card-title>
+      <mat-card-subtitle>{{ balance | async | currency: '◎' }}</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       Content
     </mat-card-content>
     <mat-card-actions>
-      Actions
+      <button mat-button (click)="requestAirdrop()">
+        Airdrop
+      </button>
+      <button mat-button (click)="transfer()">
+        Transfer
+      </button>
+
+      {{ sig }}
     </mat-card-actions>
   </mat-card>
 </mat-drawer-container>

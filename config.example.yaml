@@ -28,3 +28,14 @@ identity:
     secret: jwt_secret_key
     audiences:
     - wallet.flarex.io
+
+passkeys:
+  baseURL: https://passkeys.hanko.io
+  tenantID: 00000000-0000-0000-0000-000000000000
+  api:
+    id: 00000000-0000-0000-0000-000000000000
+    secret: hanko_api_secret
+  audience: wallet.flarex.io
+  origins:
+  - https://identity.flarex.io
+  - https://wallet.flarex.io

@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/flarexio/identity/conf"
 )
 
 var (
@@ -11,9 +13,10 @@ var (
 )
 
 type Config struct {
-	Keys        KeyConfig         `yaml:"keys"`
-	Persistence PersistenceConfig `yaml:"persistence"`
-	Identity    IdentityConfig    `yaml:"identity"`
+	Keys        KeyConfig             `yaml:"keys"`
+	Persistence PersistenceConfig     `yaml:"persistence"`
+	Identity    IdentityConfig        `yaml:"identity"`
+	Passkeys    conf.PasskeysProvider `yaml:"passkeys"`
 }
 
 type KeyConfig struct {

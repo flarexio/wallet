@@ -83,8 +83,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/flarexio/core v1.0.4 h1:okklmLMjaWBj2WHCu2YpG62ExJmpGGtzJm8bZ2AOWtA=
 github.com/flarexio/core v1.0.4/go.mod h1:Mxe8zSVxPBfj1HRozdqRMNZ/LzN87SYB5lZPnLxGHZE=
-github.com/flarexio/identity v1.0.0 h1:U5kzC1MMSvqFAfrjzga5+aBon6vO2sSzKVaQYlA7JbA=
-github.com/flarexio/identity v1.0.0/go.mod h1:Z3KPrOCMoQB5n5R0lF7osO3azk8OXuzoPowjUCQvJmE=
+github.com/flarexio/identity v1.0.1-0.20241105144208-90a1fdd47536 h1:ZKmjKsfm3iBIQ6lphIup42ZxHo1m1CvdBum3pHy5l74=
+github.com/flarexio/identity v1.0.1-0.20241105144208-90a1fdd47536/go.mod h1:Z3KPrOCMoQB5n5R0lF7osO3azk8OXuzoPowjUCQvJmE=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
 github.com/fortytw2/leaktest v1.3.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/foxcpp/go-mockdns v1.1.0 h1:jI0rD8M0wuYAxL7r/ynTrCQQq0BVqfB99Vgk7DlmewI=
@@ -95,6 +95,8 @@ github.com/gabriel-vasile/mimetype v1.4.5 h1:J7wGKdGu33ocBOhGy0z653k/lFKLFDPJMG8
 github.com/gabriel-vasile/mimetype v1.4.5/go.mod h1:ibHel+/kbxn9x2407k1izTA1S81ku1z/DlgOW2QE0M4=
 github.com/gagliardetto/binary v0.8.0 h1:U9ahc45v9HW0d15LoN++vIXSJyqR/pWw8DDlhd7zvxg=
 github.com/gagliardetto/binary v0.8.0/go.mod h1:2tfj51g5o9dnvsc+fL3Jxr22MuWzYXwx9wEoN0XQ7/c=
+github.com/gagliardetto/gofuzz v1.2.2 h1:XL/8qDMzcgvR4+CyRQW9UGdwPRPMHVJfqQ/uMvSUuQw=
+github.com/gagliardetto/gofuzz v1.2.2/go.mod h1:bkH/3hYLZrMLbfYWA0pWzXmi5TTRZnu4pMGZBkqMKvY=
 github.com/gagliardetto/solana-go v1.11.0 h1:g6mR7uRNVT0Y0LVR0bvJNfKV6TyO6oUzBYu03ZmkEmY=
 github.com/gagliardetto/solana-go v1.11.0/go.mod h1:afBEcIRrDLJst3lvAahTr63m6W2Ns6dajZxe2irF7Jg=
 github.com/gagliardetto/treeout v0.1.4 h1:ozeYerrLCmCubo1TcIjFiOWTTGteOOHND1twdFpgwaw=
