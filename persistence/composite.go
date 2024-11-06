@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"errors"
+	"time"
 
 	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/conf"
@@ -69,12 +70,12 @@ func (repo *compositeAccountRepository) Save(a *account.Account) error {
 	return nil
 }
 
-func (repo *compositeAccountRepository) FindBySubject(subject string) (*account.Account, error) {
-	if a, err := repo.cache.FindBySubject(subject); err == nil {
+func (repo *compositeAccountRepository) Find(subject string) (*account.Account, error) {
+	if a, err := repo.cache.Find(subject); err == nil {
 		return a, nil
 	}
 
-	a, err := repo.main.FindBySubject(subject)
+	a, err := repo.main.Find(subject)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +83,14 @@ func (repo *compositeAccountRepository) FindBySubject(subject string) (*account.
 	go repo.cache.Save(a)
 
 	return a, nil
+}
+
+func (repo *compositeAccountRepository) CacheTransaction(t *account.Transaction, ttl time.Duration) error {
+	return repo.cache.CacheTransaction(t, ttl)
+}
+
+func (repo *compositeAccountRepository) RemoveTransactionByID(id account.TransactionID) (*account.Transaction, error) {
+	return repo.cache.RemoveTransactionByID(id)
 }
 
 func (repo *compositeAccountRepository) Close() error {

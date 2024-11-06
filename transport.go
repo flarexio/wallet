@@ -123,9 +123,8 @@ func FinalizeTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {
-			c.String(http.StatusBadRequest, err.Error())
-			c.Error(err)
 			c.Abort()
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 

@@ -140,8 +140,7 @@ func run(cli *cli.Context) error {
 		// POST /wallets/:user/transaction/finalize
 		{
 			endpoint := wallet.FinalizeTransactionEndpoint(svc)
-			r.POST("/wallets/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.FinalizeTransactionHandler(endpoint))
+			r.POST("/wallets/:user/transaction/finalize", wallet.FinalizeTransactionHandler(endpoint))
 		}
 	}
 

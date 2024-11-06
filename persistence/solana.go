@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
@@ -38,7 +39,15 @@ func (repo *solanaAccountRepository) Save(a *account.Account) error {
 	return errors.New("not implemented")
 }
 
-func (repo *solanaAccountRepository) FindBySubject(subject string) (*account.Account, error) {
+func (repo *solanaAccountRepository) Find(subject string) (*account.Account, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (repo *solanaAccountRepository) CacheTransaction(t *account.Transaction, ttl time.Duration) error {
+	return errors.New("not implemented")
+}
+
+func (repo *solanaAccountRepository) RemoveTransactionByID(id account.TransactionID) (*account.Transaction, error) {
 	return nil, errors.New("not implemented")
 }
 

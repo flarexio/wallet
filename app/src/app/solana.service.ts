@@ -1,14 +1,24 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, from, map, of } from 'rxjs';
+import { 
+  BehaviorSubject, Observable, 
+  asyncScheduler, catchError, from, forkJoin, map, of, scheduled, mergeAll, reduce, 
+} from 'rxjs';
 
 import { 
-  Connection, PublicKey, Version, 
+  AccountInfo, Connection, PublicKey, Version, 
   TransactionInstruction, TransactionMessage, VersionedTransaction, 
+  TransactionConfirmationStrategy, TransactionSignature, SignatureResult, RpcResponseAndContext, 
   clusterApiUrl, 
   LAMPORTS_PER_SOL, 
 } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { 
+  AccountLayout, Mint, RawAccount, 
+  getMint, getTokenMetadata, 
+  TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, 
+} from '@solana/spl-token';
+import { TokenMetadata } from '@solana/spl-token-metadata';
 import { SendTransactionOptions, WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { getFavoriteDomain } from '@bonfida/spl-name-service';
 
 @Injectable({
   providedIn: 'root'
@@ -30,6 +40,19 @@ export class SolanaService {
     return from(this.connection.getVersion())
   }
 
+  getAccount(pubkey: PublicKey | null): Observable<string> {
+    if (pubkey == null) {
+      return of('');
+    }
+
+    return from(
+      getFavoriteDomain(this.connection, pubkey),
+    ).pipe(
+      map(({ reverse }) => reverse + ".sol"),
+      catchError(() => of(pubkey.toBase58())),
+    );
+  }
+
   getBalance(pubkey: PublicKey | null): Observable<number> {
     if (pubkey == null) {
       return of(0);
@@ -44,6 +67,63 @@ export class SolanaService {
 
   requestAirdrop(to: PublicKey, lamports: number): Observable<string> {
     return from(this.connection.requestAirdrop(to, lamports));
+  }
+
+  getToken(mint: PublicKey, programId: PublicKey = TOKEN_PROGRAM_ID): Observable<Mint> {
+    return from(getMint(this.connection, mint, undefined, programId));
+  }
+
+  getTokenMetadata(mint: PublicKey): Observable<TokenMetadata | null> {
+    return from(getTokenMetadata(this.connection, mint));
+  }
+
+  getTokenAccountsByOwner(owner: PublicKey | null): Observable<AssociatedTokenAccount[]> {
+    if (owner == null) {
+      return of([]);
+    }
+
+    return scheduled([
+      from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID })),
+      from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID })),
+    ], asyncScheduler).pipe(
+      mergeAll(),
+      map((accounts) => accounts.value.flatMap(
+        (raw) => {
+          const account = new Account(
+            raw, 
+            AccountLayout.decode(raw.account.data),
+          );
+
+          const ata = ToATA(account);
+
+          let observable: Observable<Token>;
+          if (!ata.isToken2022()) {
+            observable = this.getToken(ata.mint).pipe(
+              map((mint) => new Token(mint))
+            );
+          } else {
+            observable = forkJoin({
+              mint: this.getToken(ata.mint, TOKEN_2022_PROGRAM_ID),
+              metadata: this.getTokenMetadata(ata.mint),
+            }).pipe(
+              map(({ mint, metadata }) => {
+                const token = new Token(mint);
+                token.metadata = metadata;
+
+                return token;
+              }) 
+            );
+          }
+
+          observable.subscribe(
+            (token) => ata.token = token 
+          );
+          
+          return ata;
+        }
+      )),
+      reduce((acc, value) => acc.concat(value)),
+    );
   }
 
   transfer(source: PublicKey, destination: PublicKey, amount: number, owner: PublicKey, instructions: TransactionInstruction[]): Observable<Transaction> {
@@ -72,15 +152,38 @@ export class SolanaService {
           instructions: instructions,
         }).compileToV0Message();
 
-        const tx = new VersionedTransaction(message);
+        const vtx = new VersionedTransaction(message);
 
-        return new Transaction(tx, { minContextSlot: result.context.slot });
+        return new Transaction(vtx, { minContextSlot: result.context.slot });
       }),
     )
   }
 
   sendTransaction(tx: Transaction): Observable<string> {
     return from(this.connection.sendTransaction(tx.transaction, tx.options));
+  }
+
+  confirmTransaction(transaction: TransactionConfirmationStrategy | TransactionSignature): Observable<{}> {
+    let observable: Observable<RpcResponseAndContext<SignatureResult>>;
+
+    if (typeof transaction == 'string') {
+      const signature: TransactionSignature = transaction;
+      observable = from(this.connection.confirmTransaction(signature));
+    } else {
+      const strategy = transaction;
+      observable = from(this.connection.confirmTransaction(strategy));
+    }
+
+    return observable.pipe(
+      map((result) => {
+        const err = result.value.err;
+        if ((err != null) && (typeof err == 'string')) {
+          throw new Error(err)
+        }
+
+        return {};
+      })
+    );
   }
 
   public get network(): WalletAdapterNetwork {
@@ -103,8 +206,98 @@ export class Transaction {
   transaction: VersionedTransaction;
   options: SendTransactionOptions;
 
-  constructor(tx: VersionedTransaction, opts: SendTransactionOptions) {
-    this.transaction = tx;
+  constructor(vtx: VersionedTransaction, opts: SendTransactionOptions) {
+    this.transaction = vtx;
     this.options = opts;
+  }
+}
+
+export class Account<T> {
+  pubkey: PublicKey;
+  info: AccountInfo<Buffer>;
+  data: T;
+
+  constructor(
+    raw: { 
+      account: AccountInfo<Buffer>; 
+      pubkey: PublicKey;
+    }, 
+    data: T,
+  ) {
+    this.pubkey = raw.pubkey;
+    this.info = raw.account;
+    this.data = data;
+  }
+}
+
+export function ToATA<T extends RawAccount>(
+  account: Account<T>
+): AssociatedTokenAccount {
+  return new AssociatedTokenAccount(account);
+}
+
+export class AssociatedTokenAccount {
+  private _account: Account<RawAccount>;
+  private _token: Token | undefined;
+
+  constructor(account: Account<RawAccount>) {
+    this._account = account;
+  }
+
+  public isToken2022(): boolean {
+    return this._account.info.owner.equals(TOKEN_2022_PROGRAM_ID);
+  }
+
+  public get account(): RawAccount {
+    return this._account.data;
+  }
+
+  public get pubkey(): PublicKey {
+    return this._account.pubkey;
+  }
+
+  public get mint(): PublicKey {
+    return this.account.mint;
+  }
+
+  public get display_mint(): string {
+    const token = this.token;
+    if ((token != null) && (token.metadata != null)) {
+      return token.metadata.symbol;
+    }
+
+    return `${this.mint.toBase58().slice(0, 10)}...`;
+  }
+
+  public get amount(): number {
+    const amount = Number(this.account.amount);
+    return amount / Math.pow(10, this.decimals);
+  }
+
+  public set token(value: Token | undefined) {
+    this._token = value;
+  }
+
+  public get token(): Token | undefined{
+    return this._token;
+  }
+
+  public get decimals(): number {
+    const token = this.token;
+    if (token == undefined) {
+      return 9;
+    }
+
+    return token.mint.decimals;
+  }
+}
+
+export class Token {
+  mint: Mint;
+  metadata: TokenMetadata | null;
+
+  constructor(mint: Mint) {
+    this.mint = mint;
+    this.metadata = null;
   }
 }

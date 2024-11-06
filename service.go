@@ -2,10 +2,11 @@ package wallet
 
 import (
 	"errors"
-	"sync"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/flarexio/identity/passkeys"
 	"github.com/flarexio/wallet/account"
@@ -29,19 +30,16 @@ func NewService(accounts account.Repository, passkeys passkeys.Service, cfg conf
 	}
 
 	return &service{
-		accounts:     accounts,
-		keys:         keys,
-		passkeys:     passkeys,
-		transactions: make(map[string]*solana.Transaction),
+		accounts: accounts,
+		keys:     keys,
+		passkeys: passkeys,
 	}, nil
 }
 
 type service struct {
-	accounts     account.Repository
-	keys         keys.Service
-	passkeys     passkeys.Service
-	transactions map[string]*solana.Transaction
-	sync.Mutex
+	accounts account.Repository
+	keys     keys.Service
+	passkeys passkeys.Service
 }
 
 func (svc *service) findOrCreate(subject string) (*account.Account, error) {
@@ -56,7 +54,7 @@ func (svc *service) findOrCreate(subject string) (*account.Account, error) {
 }
 
 func (svc *service) Wallet(subject string) (solana.PublicKey, error) {
-	a, err := svc.accounts.FindBySubject(subject)
+	a, err := svc.accounts.Find(subject)
 	if err != nil {
 		if !errors.Is(err, account.ErrAccountNotFound) {
 			return solana.PublicKey{}, err
@@ -78,7 +76,7 @@ func (svc *service) Wallet(subject string) (solana.PublicKey, error) {
 }
 
 func (svc *service) Signature(subject string, data []byte) ([]byte, error) {
-	a, err := svc.accounts.FindBySubject(subject)
+	a, err := svc.accounts.Find(subject)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +85,7 @@ func (svc *service) Signature(subject string, data []byte) ([]byte, error) {
 }
 
 func (svc *service) SignTransaction(subject string, transaction *solana.Transaction) ([]solana.Signature, error) {
-	a, err := svc.accounts.FindBySubject(subject)
+	a, err := svc.accounts.Find(subject)
 	if err != nil {
 		return nil, err
 	}
@@ -125,33 +123,50 @@ func (svc *service) InitializeTransaction(req *InitializeTransactionRequest) (*p
 		return nil, "", err
 	}
 
-	challenge := opts.Response.Challenge.String()
+	t, err := account.NewTransaction(req.TransactionID, req.Transaction)
+	if err != nil {
+		return nil, "", err
+	}
 
-	svc.Lock()
-	svc.transactions[challenge] = req.Transaction
-	svc.Unlock()
+	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
+		return nil, "", err
+	}
 
 	return opts, mediation, nil
 }
 
 func (svc *service) FinalizeTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error) {
-	token, err := svc.passkeys.FinalizeTransaction(req)
+	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
 	if err != nil {
 		return "", nil, err
 	}
 
-	svc.Lock()
-	defer svc.Unlock()
-
-	challenge := req.Response.CollectedClientData.Challenge
-	tx, ok := svc.transactions[challenge]
-	if !ok {
-		return "", nil, errors.New("transaction not found")
+	token, err := svc.passkeys.VerifyToken(tokenStr)
+	if err != nil {
+		return "", nil, err
 	}
 
-	delete(svc.transactions, challenge)
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", nil, errors.New("invalid type")
+	}
 
-	return token, tx, nil
+	tid, ok := claims["trans"].(string)
+	if !ok {
+		return "", nil, errors.New("invalid type")
+	}
+
+	id, err := account.ParseTransactionID(tid)
+	if err != nil {
+		return "", nil, err
+	}
+
+	t, err := svc.accounts.RemoveTransactionByID(id)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return tokenStr, t.Transaction, nil
 }
 
 func (svc *service) Close() error {

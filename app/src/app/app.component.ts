@@ -1,26 +1,29 @@
-import { AsyncPipe, CurrencyPipe, JsonPipe } from '@angular/common';
+import { AsyncPipe, CurrencyPipe, JsonPipe, SlicePipe } from '@angular/common';
 import { Component, ChangeDetectorRef, HostListener } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { Observable, catchError, concatMap, map, of } from 'rxjs';
 
-import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getAssociatedTokenAddressSync } from '@solana/spl-token';
-import { v4 as uuid } from 'uuid';
-
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { v4 as uuid } from 'uuid';
+
 import { environment as env } from '../environments/environment';
 import { IdentityService, User } from './identity.service';
-import { SolanaService } from './solana.service';
+import { SolanaService, AssociatedTokenAccount } from './solana.service';
 import { WalletService } from './wallet.service';
-
+import { NumberFormatPipe } from './shared/number-format.pipe';
 declare var google: any;
 
 @Component({
@@ -30,15 +33,19 @@ declare var google: any;
     AsyncPipe,
     CurrencyPipe,
     JsonPipe,
+    SlicePipe,
     RouterOutlet,
     MatButtonModule,
     MatButtonToggleModule,
     MatCardModule,
+    MatExpansionModule,
     MatIconModule,
     MatMenuModule,
+    MatSnackBarModule,
     MatSidenavModule,
     MatToolbarModule,
     MatTooltipModule,
+    NumberFormatPipe,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
@@ -47,20 +54,27 @@ export class AppComponent {
   user: User | undefined = undefined;
   lastSigninMethod: string | null = null;
 
-  wallet: Observable<PublicKey | null> = of(null);
+  account: Observable<string> = of('');
   balance: Observable<number> = of(0);
-  sig: string = '';
+  tokenAccounts: Observable<AssociatedTokenAccount[]> = of([]);
 
   constructor(
     private ref: ChangeDetectorRef,
+    private snackBar: MatSnackBar,
     private identityService: IdentityService,
     private solanaService: SolanaService,
     private walletService: WalletService,
   ) {
-    this.wallet = this.walletService.walletChange;
+    this.account = this.walletService.walletChange.pipe(
+      concatMap((pubkey) => this.solanaService.getAccount(pubkey)),
+    );
 
     this.balance = this.walletService.walletChange.pipe(
       concatMap((pubkey) => this.solanaService.getBalance(pubkey)),
+    );
+
+    this.tokenAccounts = this.walletService.walletChange.pipe(
+      concatMap((pubkey) => this.solanaService.getTokenAccountsByOwner(pubkey)),
     );
 
     this.lastSigninMethod = localStorage.getItem('last-signin-method');
@@ -202,9 +216,25 @@ export class AppComponent {
       concatMap((tx) => this.walletService.signTransaction(tid, tx)),
       concatMap(({ token, tx }) => this.solanaService.sendTransaction(tx)),
     ).subscribe({
-      next: (sig) => this.sig = sig,
+      next: (sig) => console.log(`signature: ${sig}`),
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     });
+  }
+
+  async copyAccount(account: string) {
+    await navigator.clipboard.writeText(account);
+
+    this.snackBar.open('account copied', undefined, {
+      duration: 1000
+    });
+  }
+
+  browseAccount(account: string, network: WalletAdapterNetwork) {
+    window.open(`https://explorer.solana.com/address/${account}?cluster=${network}`, '_blank');
+  }
+
+  public get network(): WalletAdapterNetwork {
+    return this.solanaService.network
   }
 }
