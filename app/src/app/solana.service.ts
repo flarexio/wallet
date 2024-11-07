@@ -65,7 +65,9 @@ export class SolanaService {
     );
   }
 
-  requestAirdrop(to: PublicKey, lamports: number): Observable<string> {
+  requestAirdrop(to: PublicKey, amount: number): Observable<string> {
+    const lamports = amount * LAMPORTS_PER_SOL;
+
     return from(this.connection.requestAirdrop(to, lamports));
   }
 

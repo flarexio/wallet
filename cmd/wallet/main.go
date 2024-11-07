@@ -123,12 +123,19 @@ func run(cli *cli.Context) error {
 				wallet.WalletHandler(endpoint))
 		}
 
-		// POST /wallets/:user/sign/transaction
-		// {
-		// 	endpoint := wallet.SignTransactionEndpoint(svc)
-		// 	r.POST("/wallets/:user/sign/transaction", auth("wallet::accounts.get", identityHTTP.Owner),
-		// 		wallet.SignTransactionHandler(endpoint))
-		// }
+		// POST /wallets/:user/signature/initialize
+		{
+			endpoint := wallet.InitializeSignatureEndpoint(svc)
+			r.POST("/wallets/:user/signature/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.InitializeSignatureHandler(endpoint))
+		}
+
+		// POST /wallets/:user/signature/finalize
+		{
+			endpoint := wallet.FinalizeSignatureEndpoint(svc)
+			r.POST("/wallets/:user/signature/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.FinalizeSignatureHandler(endpoint))
+		}
 
 		// POST /wallets/:user/transaction/initialize
 		{
@@ -140,14 +147,10 @@ func run(cli *cli.Context) error {
 		// POST /wallets/:user/transaction/finalize
 		{
 			endpoint := wallet.FinalizeTransactionEndpoint(svc)
-			r.POST("/wallets/:user/transaction/finalize", wallet.FinalizeTransactionHandler(endpoint))
+			r.POST("/wallets/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.FinalizeTransactionHandler(endpoint))
 		}
 	}
-
-	r.StaticFS("/app", gin.Dir("./app/dist/app/browser", false))
-	r.NoRoute(func(c *gin.Context) {
-		c.File("./app/dist/app/browser/index.html")
-	})
 
 	port := cli.Int("port")
 	go r.Run(":" + strconv.Itoa(port))

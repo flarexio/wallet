@@ -1,0 +1,44 @@
+<mat-accordion>
+@for (account of tokenAccounts | async; track account; let i = $index) {
+  <mat-expansion-panel hideToggle>
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        {{ account.display_mint }}
+      </mat-panel-title>
+      <mat-panel-description>
+        {{ account.amount | numberFormat }}
+      </mat-panel-description>
+    </mat-expansion-panel-header>
+
+    <form class="transfer-form" 
+          [formGroup]="forms[i]">
+      <mat-form-field class="form-field" appearance="outline">
+        <mat-label>To wallet</mat-label>
+        <input matInput formControlName="toWallet">
+      @if (!forms[i].valid) {
+        <mat-error>{{ getWalletError(forms[i].get('toWallet')) }}</mat-error>
+      }
+      </mat-form-field>
+
+      <mat-form-field class="form-field" appearance="outline" floatLabel="always">
+        <mat-label>Amount</mat-label>
+        <mat-icon matPrefix>attach_money</mat-icon>
+        <input matInput type="number" class="amount-input" 
+               formControlName="amount" placeholder="0">
+        <span matTextSuffix>.00</span>
+      @if (!forms[i].valid) {
+        <mat-error>{{ getAmountError(forms[i].get('amount')) }}</mat-error>
+      }
+      </mat-form-field>
+    </form>
+
+    <mat-action-row>
+      <button mat-button [disabled]="!forms[i].valid" 
+                         (click)="transfer(account, forms[i])">
+        <mat-icon>send_money</mat-icon>
+        Send
+      </button>
+    </mat-action-row>
+  </mat-expansion-panel>
+}
+</mat-accordion>

@@ -29,7 +29,7 @@ func WalletHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	}
 }
 
-func SignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func SignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
@@ -38,7 +38,7 @@ func SignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *SignatureRequest
+		var req *SignMessageRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -46,6 +46,57 @@ func SignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		}
 
 		req.Subject = username
+
+		ctx := c.Request.Context()
+		resp, err := endpoint(ctx, req)
+		if err != nil {
+			c.Abort()
+			c.String(http.StatusExpectationFailed, err.Error())
+			return
+		}
+
+		c.JSON(http.StatusOK, &resp)
+	}
+}
+
+func InitializeSignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username := c.Param("user")
+		if username == "" {
+			c.Abort()
+			c.String(http.StatusBadRequest, "user is required")
+			return
+		}
+
+		var req *InitializeSignatureRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.Abort()
+			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
+
+		req.Subject = username
+
+		ctx := c.Request.Context()
+		resp, err := endpoint(ctx, req)
+		if err != nil {
+			c.Abort()
+			c.String(http.StatusExpectationFailed, err.Error())
+			return
+		}
+
+		c.JSON(http.StatusOK, &resp)
+	}
+}
+
+func FinalizeSignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		req, err := protocol.ParseCredentialRequestResponse(c.Request)
+		if err != nil {
+			c.Abort()
+			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
 
 		ctx := c.Request.Context()
 		resp, err := endpoint(ctx, req)

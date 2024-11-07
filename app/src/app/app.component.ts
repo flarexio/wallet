@@ -6,24 +6,22 @@ import { Observable, catchError, concatMap, map, of } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { v4 as uuid } from 'uuid';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User } from './identity.service';
 import { SolanaService, AssociatedTokenAccount } from './solana.service';
 import { WalletService } from './wallet.service';
-import { NumberFormatPipe } from './shared/number-format.pipe';
+import { TokenTransferComponent } from './token-transfer/token-transfer.component';
+
 declare var google: any;
 
 @Component({
@@ -38,14 +36,14 @@ declare var google: any;
     MatButtonModule,
     MatButtonToggleModule,
     MatCardModule,
-    MatExpansionModule,
     MatIconModule,
+    MatInputModule,
     MatMenuModule,
     MatSnackBarModule,
     MatSidenavModule,
     MatToolbarModule,
     MatTooltipModule,
-    NumberFormatPipe,
+    TokenTransferComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
@@ -59,7 +57,7 @@ export class AppComponent {
   tokenAccounts: Observable<AssociatedTokenAccount[]> = of([]);
 
   constructor(
-    private ref: ChangeDetectorRef,
+    private changeDetectorRef: ChangeDetectorRef,
     private snackBar: MatSnackBar,
     private identityService: IdentityService,
     private solanaService: SolanaService,
@@ -71,10 +69,6 @@ export class AppComponent {
 
     this.balance = this.walletService.walletChange.pipe(
       concatMap((pubkey) => this.solanaService.getBalance(pubkey)),
-    );
-
-    this.tokenAccounts = this.walletService.walletChange.pipe(
-      concatMap((pubkey) => this.solanaService.getTokenAccountsByOwner(pubkey)),
     );
 
     this.lastSigninMethod = localStorage.getItem('last-signin-method');
@@ -133,7 +127,7 @@ export class AppComponent {
         localStorage.setItem('last-signin-method', 'google');
       },
       error: (err) => console.error(err),
-      complete: () => this.ref.detectChanges(),
+      complete: () => this.changeDetectorRef.detectChanges(),
     })
   }
 
@@ -179,47 +173,13 @@ export class AppComponent {
     const to = this.walletService.currentWallet;
     if (to == null) return;
 
-    const lamports = 2 * LAMPORTS_PER_SOL;
+    const amount = 2;
 
-    this.solanaService.requestAirdrop(to, lamports).subscribe({
+    this.solanaService.requestAirdrop(to, amount).subscribe({
       next: (tx) => console.log(tx),
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })
-  }
-
-  transfer() {
-    const owner = this.walletService.currentWallet;
-    if (owner == null) return;
-
-    const mint = new PublicKey('CcTqnRJaUXoZEHPkMz85gojwh1MSriwkJTfrKiJuwWGY');
-    const fromATA = getAssociatedTokenAddressSync(mint, owner);
-    console.log(`fromATA: ${fromATA}`);
-
-    const toWallet = new PublicKey('BdTg8ZHfrUsYQWKygqrBjf9mUo2sKNkkm5jHbKesortd');
-    const toATA = getAssociatedTokenAddressSync(mint, toWallet);
-    console.log(`toATA: ${toATA}`);
-
-    const source = fromATA;
-    const destination = toATA;
-    const amount = 1000000 * Math.pow(10, 9);
-
-    const tid = uuid();
-
-    this.solanaService.transfer(
-      source, 
-      destination, 
-      amount, 
-      owner,
-      [], 
-    ).pipe(
-      concatMap((tx) => this.walletService.signTransaction(tid, tx)),
-      concatMap(({ token, tx }) => this.solanaService.sendTransaction(tx)),
-    ).subscribe({
-      next: (sig) => console.log(`signature: ${sig}`),
-      error: (err) => console.error(err),
-      complete: () => console.log('complete'),
-    });
   }
 
   async copyAccount(account: string) {

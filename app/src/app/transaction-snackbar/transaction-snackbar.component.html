@@ -1,0 +1,22 @@
+<span matSnackBarLabel class="snackbar-label">
+@if (!isConfirmed) {
+  @if (err == undefined) {
+    Transaction submitted. Awaiting confirmation...
+    <mat-spinner diameter="20"></mat-spinner>
+  } @else {
+    Transaction failed! ({{ err }})
+    <mat-icon>error</mat-icon>
+  }
+} @else {
+  Transaction ID: [{{ (data.signature | slice : 0 : 10) + '...' }}] confirmed. Check on Solana.
+}
+</span>
+<span matSnackBarActions>
+  <a mat-button matSnackBarAction
+     href="https://explorer.solana.com/tx/{{ data.signature }}?cluster={{ data.network }}" target="_blank">
+    <mat-icon>open_in_new</mat-icon>
+  </a>
+  <button mat-button matSnackBarAction (click)="snackBarRef.dismiss()">
+    <mat-icon>close</mat-icon>
+  </button>
+</span>

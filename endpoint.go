@@ -23,19 +23,73 @@ func WalletEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
-type SignatureRequest struct {
+type SignMessageRequest struct {
 	Subject string `json:"-"`
-	Data    []byte `json:"data"`
+	Message []byte `json:"message"`
 }
 
-func SignatureEndpoint(svc Service) endpoint.Endpoint {
+func SignMessageEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req, ok := request.(*SignatureRequest)
+		req, ok := request.(*SignMessageRequest)
 		if !ok {
 			return nil, errors.New("invalid request")
 		}
 
-		return svc.Signature(req.Subject, req.Data)
+		return svc.SignMessage(req.Subject, req.Message)
+	}
+}
+
+type InitializeSignatureRequest struct {
+	Subject         string `json:"-"`
+	UserID          string `json:"user_id"`
+	TransactionID   string `json:"transaction_id"`
+	TransactionData []byte `json:"transaction_data"`
+}
+
+func InitializeSignatureEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req, ok := request.(*InitializeSignatureRequest)
+		if !ok {
+			return nil, errors.New("invalid request")
+		}
+
+		opts, mediation, err := svc.InitializeSignature(req)
+		if err != nil {
+			return nil, err
+		}
+
+		resp := &passkeys.InitializeLoginResponse{
+			Response:  opts.Response,
+			Mediation: mediation,
+		}
+
+		return resp, err
+	}
+}
+
+type FinalizeSignatureResponse struct {
+	Token     string           `json:"token"`
+	Signature solana.Signature `json:"sig"`
+}
+
+func FinalizeSignatureEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req, ok := request.(*protocol.ParsedCredentialAssertionData)
+		if !ok {
+			return nil, errors.New("invalid type")
+		}
+
+		token, sig, err := svc.FinalizeSignature(req)
+		if err != nil {
+			return nil, err
+		}
+
+		resp := &FinalizeSignatureResponse{
+			Token:     token,
+			Signature: sig,
+		}
+
+		return resp, nil
 	}
 }
 

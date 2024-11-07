@@ -86,12 +86,14 @@ func (id TransactionID) String() string {
 type Transaction struct {
 	TransactionID TransactionID
 	Transaction   *solana.Transaction
+	Signatures    []solana.Signature
 }
 
 func (tx *Transaction) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		TransactionID string `json:"transaction_id"`
-		Transaction   []byte `json:"transaction"`
+		TransactionID string             `json:"transaction_id"`
+		Transaction   []byte             `json:"transaction"`
+		Signatures    []solana.Signature `json:"signatures"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -111,6 +113,7 @@ func (tx *Transaction) UnmarshalJSON(data []byte) error {
 	}
 
 	tx.Transaction = transaction
+	tx.Signatures = raw.Signatures
 
 	return nil
 }
@@ -122,12 +125,14 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 	}
 
 	out := struct {
-		TransactionID string `json:"transaction_id"`
-		Transaction   []byte `json:"transaction"`
+		TransactionID string             `json:"transaction_id"`
+		Transaction   []byte             `json:"transaction"`
+		Signatures    []solana.Signature `json:"signatures"`
 	}{
 		TransactionID: tx.TransactionID.String(),
 		Transaction:   bs,
+		Signatures:    tx.Signatures,
 	}
 
-	return json.Marshal(out)
+	return json.Marshal(&out)
 }

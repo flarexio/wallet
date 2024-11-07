@@ -1,0 +1,19 @@
+.transfer-form {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px 0 10px;
+}
+
+.form-field {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.amount-input {
+  text-align: right;
+}
+
+input.amount-input::-webkit-outer-spin-button,
+input.amount-input::-webkit-inner-spin-button {
+  display: none;
+}
