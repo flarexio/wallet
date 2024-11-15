@@ -108,12 +108,12 @@ func (svc *service) InitializeSignature(req *InitializeSignatureRequest) (*proto
 		return nil, "", err
 	}
 
-	t, err := account.NewTransaction(req.TransactionID, nil)
+	t, err := account.NewMessageTransaction(req.TransactionID, req.TransactionData)
 	if err != nil {
 		return nil, "", err
 	}
 
-	t.Signatures = []solana.Signature{sig}
+	t.Signature = sig
 
 	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
 		return nil, "", err
@@ -155,7 +155,7 @@ func (svc *service) FinalizeSignature(req *protocol.ParsedCredentialAssertionDat
 		return "", sig, err
 	}
 
-	sig = t.Signatures[0]
+	sig = t.Signature
 
 	return tokenStr, sig, nil
 }
@@ -205,7 +205,7 @@ func (svc *service) InitializeTransaction(req *InitializeTransactionRequest) (*p
 		return nil, "", err
 	}
 
-	t.Signatures = sigs
+	t.Signature = sigs[0]
 
 	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
 		return nil, "", err

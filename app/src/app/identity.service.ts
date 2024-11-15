@@ -38,8 +38,8 @@ export class IdentityService {
 
     return this.http.patch(`${this.baseURL}/signin`, params).pipe(
       map((raw: any) => {
-        const token = Object.assign(new Token(), raw.token);
-        const user = Object.assign(new User(), raw.user);
+        const token = raw.token as Token;
+        const user = raw.user as User;
 
         this.currentToken = token;
         this.currentUser = user;
@@ -69,8 +69,8 @@ export class IdentityService {
         'credential': token,
         'provider': 'passkeys',
       }, { headers })),
-      map((raw) => {
-        const user = Object.assign(new User(), raw);
+      map((raw: any) => {
+        const user = raw.user as User;
 
         this.currentUser = user;
         return user;
@@ -128,37 +128,22 @@ export class IdentityService {
   }
 }
 
-export class User {
-  public id: string = '';
-  public username: string = '';
-  public name: string = '';
-  public email: string = '';
-  public status: number = 0;
-  public avatar: string = '';
-
-  private _accounts: SocialAccount[] = [];
-
-  public get accounts(): SocialAccount[] {
-      return this._accounts;
-  }
-  public set accounts(value: SocialAccount[]) {
-      const accounts: SocialAccount[] = new Array();
-      if (value != null) {
-          for (const account of value) {
-              accounts.push(Object.assign(new SocialAccount(), account));
-          }
-      }
-
-      this._accounts = accounts;
-  }
+export interface User {
+  id: string;
+  username: string;
+  name: string;
+  email: string;
+  status: number;
+  accounts: SocialAccount[];
+  avatar: string;
 }
 
-export class SocialAccount {
-  public social_id: string = '';
-  public social_provider: string = '';
+export interface SocialAccount {
+  social_id: string;
+  social_provider: string;
 }
 
-export class Token {
-  public token: string = '';
-  public expired_at: string = '';
+export interface Token {
+  token: string;
+  expired_at: string;
 }

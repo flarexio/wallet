@@ -191,8 +191,10 @@ export class TokenTransferComponent {
       owner,
       transactionInstructions, 
     ).pipe(
-      concatMap((tx) => this.walletService.signTransaction(tid, tx)),
-      concatMap(({ token, tx }) => this.solanaService.sendTransaction(tx)),
+      concatMap((tx) => this.walletService.signTransaction(tid, tx.transaction).pipe(
+        map((resp) => { tx.transaction = resp.tx; return tx; }),
+      )),
+      concatMap((tx) => this.solanaService.sendTransaction(tx)),
     ).subscribe({
       next: (signature) => {
         this.snackBar.openFromComponent(TransactionSnackbarComponent, {

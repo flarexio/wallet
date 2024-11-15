@@ -63,8 +63,22 @@ func NewTransaction(id string, tx *solana.Transaction) (*Transaction, error) {
 	}
 
 	return &Transaction{
-		TransactionID: tid,
-		Transaction:   tx,
+		TransactionID:   tid,
+		TransactionType: TransactionTypeTransaction,
+		Transaction:     tx,
+	}, nil
+}
+
+func NewMessageTransaction(id string, msg []byte) (*Transaction, error) {
+	tid, err := ParseTransactionID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Transaction{
+		TransactionID:   tid,
+		TransactionType: TransactionTypeMessage,
+		Message:         msg,
 	}, nil
 }
 
@@ -83,17 +97,28 @@ func (id TransactionID) String() string {
 	return uuid.UUID(id).String()
 }
 
+type TransactionType string
+
+const (
+	TransactionTypeTransaction TransactionType = "transaction"
+	TransactionTypeMessage     TransactionType = "message"
+)
+
 type Transaction struct {
-	TransactionID TransactionID
-	Transaction   *solana.Transaction
-	Signatures    []solana.Signature
+	TransactionID   TransactionID
+	TransactionType TransactionType
+	Transaction     *solana.Transaction
+	Message         []byte
+	Signature       solana.Signature
 }
 
 func (tx *Transaction) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		TransactionID string             `json:"transaction_id"`
-		Transaction   []byte             `json:"transaction"`
-		Signatures    []solana.Signature `json:"signatures"`
+		TransactionID   string           `json:"transaction_id"`
+		TransactionType TransactionType  `json:"transaction_type"`
+		Transaction     []byte           `json:"transaction"`
+		Message         []byte           `json:"message"`
+		Signature       solana.Signature `json:"signature"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -106,32 +131,51 @@ func (tx *Transaction) UnmarshalJSON(data []byte) error {
 	}
 
 	tx.TransactionID = id
+	tx.TransactionType = raw.TransactionType
 
-	transaction, err := solana.TransactionFromBytes(raw.Transaction)
-	if err != nil {
-		return err
+	switch raw.TransactionType {
+	case TransactionTypeTransaction:
+		transaction, err := solana.TransactionFromBytes(raw.Transaction)
+		if err != nil {
+			return err
+		}
+
+		tx.Transaction = transaction
+		tx.Signature = raw.Signature
+
+	case TransactionTypeMessage:
+		tx.Message = raw.Message
+		tx.Signature = raw.Signature
 	}
-
-	tx.Transaction = transaction
-	tx.Signatures = raw.Signatures
 
 	return nil
 }
 
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
-	bs, err := tx.Transaction.MarshalBinary()
-	if err != nil {
-		return nil, err
+	out := struct {
+		TransactionID   string           `json:"transaction_id"`
+		TransactionType TransactionType  `json:"transaction_type"`
+		Transaction     []byte           `json:"transaction"`
+		Message         []byte           `json:"message"`
+		Signature       solana.Signature `json:"signature"`
+	}{
+		TransactionID:   tx.TransactionID.String(),
+		TransactionType: tx.TransactionType,
 	}
 
-	out := struct {
-		TransactionID string             `json:"transaction_id"`
-		Transaction   []byte             `json:"transaction"`
-		Signatures    []solana.Signature `json:"signatures"`
-	}{
-		TransactionID: tx.TransactionID.String(),
-		Transaction:   bs,
-		Signatures:    tx.Signatures,
+	switch tx.TransactionType {
+	case TransactionTypeTransaction:
+		bs, err := tx.Transaction.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+
+		out.Transaction = bs
+		out.Signature = tx.Signature
+
+	case TransactionTypeMessage:
+		out.Message = tx.Message
+		out.Signature = tx.Signature
 	}
 
 	return json.Marshal(&out)

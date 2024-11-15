@@ -91,29 +91,25 @@ export class SolanaService {
       mergeAll(),
       map((accounts) => accounts.value.flatMap(
         (raw) => {
-          const account = new Account(
-            raw, 
-            AccountLayout.decode(raw.account.data),
-          );
+          const account = {
+            pubkey: raw.pubkey,
+            info: raw.account,
+            data: AccountLayout.decode(raw.account.data),
+          };
 
           const ata = ToATA(account);
 
           let observable: Observable<Token>;
           if (!ata.isToken2022()) {
             observable = this.getToken(ata.mint).pipe(
-              map((mint) => new Token(mint))
+              map((mint) => ({ mint, metadata: null }))
             );
           } else {
             observable = forkJoin({
               mint: this.getToken(ata.mint, TOKEN_2022_PROGRAM_ID),
               metadata: this.getTokenMetadata(ata.mint),
             }).pipe(
-              map(({ mint, metadata }) => {
-                const token = new Token(mint);
-                token.metadata = metadata;
-
-                return token;
-              }) 
+              map(({ mint, metadata }) => ({ mint, metadata }))
             );
           }
 
@@ -156,8 +152,8 @@ export class SolanaService {
 
         const vtx = new VersionedTransaction(message);
 
-        return new Transaction(vtx, { minContextSlot: result.context.slot });
-      }),
+        return { transaction: vtx, options: { minContextSlot: result.context.slot } };
+      })
     )
   }
 
@@ -204,32 +200,15 @@ export class SolanaService {
   }
 }
 
-export class Transaction {
+export interface Transaction {
   transaction: VersionedTransaction;
   options: SendTransactionOptions;
-
-  constructor(vtx: VersionedTransaction, opts: SendTransactionOptions) {
-    this.transaction = vtx;
-    this.options = opts;
-  }
 }
 
-export class Account<T> {
+export interface Account<T> {
   pubkey: PublicKey;
   info: AccountInfo<Buffer>;
   data: T;
-
-  constructor(
-    raw: { 
-      account: AccountInfo<Buffer>; 
-      pubkey: PublicKey;
-    }, 
-    data: T,
-  ) {
-    this.pubkey = raw.pubkey;
-    this.info = raw.account;
-    this.data = data;
-  }
 }
 
 export function ToATA<T extends RawAccount>(
@@ -294,12 +273,7 @@ export class AssociatedTokenAccount {
   }
 }
 
-export class Token {
+export interface Token {
   mint: Mint;
   metadata: TokenMetadata | null;
-
-  constructor(mint: Mint) {
-    this.mint = mint;
-    this.metadata = null;
-  }
 }

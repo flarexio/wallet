@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -115,39 +116,45 @@ func run(cli *cli.Context) error {
 
 	auth := identityHTTP.Authorizator(policy)
 
+	api := r.Group("/wallet/v1")
 	{
-		// GET /wallets/:user
+		// GET /health
+		api.GET("/health", func(c *gin.Context) {
+			c.String(http.StatusOK, "ok")
+		})
+
+		// GET /accounts/:user
 		{
 			endpoint := wallet.WalletEndpoint(svc)
-			r.GET("/wallets/:user", auth("wallet::accounts.get", identityHTTP.Owner),
+			api.GET("/accounts/:user", auth("wallet::accounts.get", identityHTTP.Owner),
 				wallet.WalletHandler(endpoint))
 		}
 
-		// POST /wallets/:user/signature/initialize
+		// POST /accounts/:user/signature/initialize
 		{
 			endpoint := wallet.InitializeSignatureEndpoint(svc)
-			r.POST("/wallets/:user/signature/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
+			api.POST("/accounts/:user/signature/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
 				wallet.InitializeSignatureHandler(endpoint))
 		}
 
-		// POST /wallets/:user/signature/finalize
+		// POST /accounts/:user/signature/finalize
 		{
 			endpoint := wallet.FinalizeSignatureEndpoint(svc)
-			r.POST("/wallets/:user/signature/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
+			api.POST("/accounts/:user/signature/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
 				wallet.FinalizeSignatureHandler(endpoint))
 		}
 
-		// POST /wallets/:user/transaction/initialize
+		// POST /accounts/:user/transaction/initialize
 		{
 			endpoint := wallet.InitializeTransactionEndpoint(svc)
-			r.POST("/wallets/:user/transaction/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
+			api.POST("/accounts/:user/transaction/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
 				wallet.InitializeTransactionHandler(endpoint))
 		}
 
-		// POST /wallets/:user/transaction/finalize
+		// POST /accounts/:user/transaction/finalize
 		{
 			endpoint := wallet.FinalizeTransactionEndpoint(svc)
-			r.POST("/wallets/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
+			api.POST("/accounts/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
 				wallet.FinalizeTransactionHandler(endpoint))
 		}
 	}
