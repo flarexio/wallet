@@ -31,6 +31,8 @@ func TestConfig(t *testing.T) {
 	assert.Equal("wallet", cfg.Keys.Google.KeyRing)
 	assert.Equal("main", cfg.Keys.Google.Key)
 
+	assert.Len(cfg.Keys.Session.Key, 32)
+
 	assert.Equal(PersistenceDriverComposite, cfg.Persistence.Driver)
 	assert.NotNil(cfg.Persistence.Composite)
 

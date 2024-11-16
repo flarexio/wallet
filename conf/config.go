@@ -20,7 +20,8 @@ type Config struct {
 }
 
 type KeyConfig struct {
-	Google GoogleKeyConfig `yaml:"google"`
+	Google  GoogleKeyConfig  `yaml:"google"`
+	Session SessionKeyConfig `yaml:"session"`
 }
 
 type GoogleKeyConfig struct {
@@ -28,6 +29,10 @@ type GoogleKeyConfig struct {
 	Location  string `yaml:"location"`
 	KeyRing   string `yaml:"keyRing"`
 	Key       string `yaml:"key"`
+}
+
+type SessionKeyConfig struct {
+	Key [32]byte `yaml:"key"`
 }
 
 func (key GoogleKeyConfig) Path() string {

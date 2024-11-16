@@ -250,3 +250,69 @@ func FinalizeTransactionEndpoint(svc Service) endpoint.Endpoint {
 		return resp, nil
 	}
 }
+
+type CreateSessionRequest struct {
+	Data []byte `json:"data"`
+}
+
+type CreateSessionResponse struct {
+	Session string
+	Data    <-chan []byte
+}
+
+func CreateSessionEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req, ok := request.(*CreateSessionRequest)
+		if !ok {
+			return nil, errors.New("invalid request")
+		}
+
+		session, ch, err := svc.CreateSession(ctx, req.Data)
+		if err != nil {
+			return nil, err
+		}
+
+		resp := &CreateSessionResponse{
+			Session: session,
+			Data:    ch,
+		}
+
+		return resp, nil
+	}
+}
+
+type SessionDataResponse struct {
+	Data []byte `json:"data"`
+}
+
+func SessionDataEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		session, ok := request.(string)
+		if !ok {
+			return nil, errors.New("invalid request")
+		}
+
+		data, err := svc.SessionData(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+
+		return &SessionDataResponse{Data: data}, nil
+	}
+}
+
+type AckSessionRequest struct {
+	Session string `json:"-"`
+	Data    []byte `json:"data"`
+}
+
+func AckSessionEndpoint(svc Service) endpoint.Endpoint {
+	return func(ctx context.Context, request any) (any, error) {
+		req, ok := request.(*AckSessionRequest)
+		if !ok {
+			return nil, errors.New("invalid request")
+		}
+
+		return nil, svc.AckSession(ctx, req.Session, req.Data)
+	}
+}

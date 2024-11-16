@@ -6,6 +6,12 @@
   "display": "standalone",
   "scope": "./",
   "start_url": "./",
+  "protocol_handlers": [
+    {
+      "protocol": "web+flarex",
+      "url": "/%s"
+    }
+  ],
   "icons": [
     {
       "src": "icons/icon-72x72.png",

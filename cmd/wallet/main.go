@@ -157,6 +157,24 @@ func run(cli *cli.Context) error {
 			api.POST("/accounts/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
 				wallet.FinalizeTransactionHandler(endpoint))
 		}
+
+		// POST /sessions
+		{
+			endpoint := wallet.CreateSessionEndpoint(svc)
+			api.POST("/sessions", wallet.CreateSessionHandler(endpoint))
+		}
+
+		// GET /sessions/:session
+		{
+			endpoint := wallet.SessionDataEndpoint(svc)
+			api.GET("/sessions/:session", wallet.SessionDataHandler(endpoint))
+		}
+
+		// POST /sessions/:session/ack
+		{
+			endpoint := wallet.AckSessionEndpoint(svc)
+			api.POST("/sessions/:session/ack", wallet.AckSessionHandler(endpoint))
+		}
 	}
 
 	port := cli.Int("port")

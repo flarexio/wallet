@@ -1,7 +1,6 @@
-import { AsyncPipe, CurrencyPipe, JsonPipe, SlicePipe } from '@angular/common';
-import { Component, ChangeDetectorRef, HostListener } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
-import { Observable, catchError, concatMap, map, of } from 'rxjs';
+import { AsyncPipe, CurrencyPipe, SlicePipe } from '@angular/common';
+import { Component, ChangeDetectorRef, HostListener, OnInit } from '@angular/core';
+import { Observable, catchError, concatMap, filter, interval, map, of, switchMap, take } from 'rxjs';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -14,13 +13,8 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { 
-  SignMessagePayload, SignTransactionPayload, TrustSitePayload, 
-  WalletMessage, WalletMessageResponse, WalletMessageType, 
-} from '@flarex/wallet-adapter';
-import { VersionedTransaction } from '@solana/web3.js';
+import { WalletMessage } from '@flarex/wallet-adapter';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import * as base58 from 'bs58';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User } from './identity.service';
@@ -36,9 +30,7 @@ declare var google: any;
   imports: [
     AsyncPipe,
     CurrencyPipe,
-    JsonPipe,
     SlicePipe,
-    RouterOutlet,
     MatButtonModule,
     MatButtonToggleModule,
     MatCardModule,
@@ -54,7 +46,7 @@ declare var google: any;
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   user: User | undefined = undefined;
   lastSigninMethod: string | null = null;
 
@@ -100,6 +92,40 @@ export class AppComponent {
     });
   }
 
+  ngOnInit() {
+    const url = window.location.pathname;
+    if (url.length > 1) {
+      const params = decodeURIComponent(url.slice(1));
+      this.handleProtocolHandler(params);
+    }
+  }
+
+  private handleProtocolHandler(resource: string) {
+    if (resource.startsWith('web+flarex:')) {
+      const url = new URL(resource);
+      if (!url.pathname.includes('wallet')) {
+        return;
+      }
+
+      const session = url.searchParams.get('session');
+      if (session == null) {
+        return;
+      }
+
+      interval(1000).pipe(
+        filter(() => this.user != undefined),
+        take(1),
+        switchMap(() => this.walletService.session(session)),
+        concatMap((msg) => this.walletService.messageHandler(msg)),
+        concatMap((resp) => this.walletService.ackSession(session, resp)),
+      ).subscribe({
+        next: (ok) => console.log(ok),
+        error: (err) => console.error(err),
+        complete: () => console.log('complete'),
+      });
+    }
+  }
+
   @HostListener('window:message', ['$event'])
   messageHandler(event: MessageEvent) {
     console.log(event);
@@ -113,91 +139,18 @@ export class AppComponent {
     }
 
     // Handle wallet messages
-    const msg = event.data as WalletMessage;
-    switch (msg.type) {
-      case WalletMessageType.TRUST_SITE:
-        const trustSitePayload = msg.payload as TrustSitePayload;
-        trustSitePayload.accept = true;
-
-        // TODO: check if the site is trusted
-
+    const msg = WalletMessage.deserialize(event.data);
+    this.walletService.messageHandler(msg).subscribe({
+      next: (resp) => {
         if (event.source) {
-          event.source.postMessage(msg, { targetOrigin: event.origin });
+          event.source.postMessage(resp.serialize(), { targetOrigin: event.origin });
         }
-        return;
-
-      case WalletMessageType.SIGN_TRANSACTION:
-        const signTxPayload = msg.payload as SignTransactionPayload;
-        const bytes = Buffer.from(signTxPayload.tx);
-        const tx = VersionedTransaction.deserialize(bytes);
-
-        this.walletService.signTransaction(msg.id, tx).subscribe({
-          next: (result) => {
-            const bytes = result.tx.serialize();
-            const sigs = result.tx.signatures;
-
-            const resp: WalletMessageResponse = {
-              id: msg.id,
-              type: msg.type,
-              success: true,
-              payload: { tx: bytes, sigs },
-            };
-
-            if (event.source) {
-              event.source.postMessage(resp, { targetOrigin: event.origin });
-            }
-          },
-          error: (err) => {
-            const resp: WalletMessageResponse = {
-              id: msg.id,
-              type: msg.type,
-              success: false,
-              error: err.message,
-            };
-
-            if (event.source) {
-              event.source.postMessage(resp, { targetOrigin: event.origin });
-            }
-          },
-          complete: () => console.log('complete'),
-        });
-        return;
-
-      case WalletMessageType.SIGN_MESSAGE:
-        const signMsgPayload = msg.payload as SignMessagePayload;
-
-        this.walletService.signMessage(msg.id, signMsgPayload.msg).subscribe({
-          next: (result) => {
-            const sig = base58.decode(result.sig);
-
-            const resp: WalletMessageResponse = {
-              id: msg.id,
-              type: msg.type,
-              success: true,
-              payload: { msg: signMsgPayload.msg, sig },
-            };
-
-            if (event.source) {
-              event.source.postMessage(resp, { targetOrigin: event.origin });
-            }
-          },
-          error: (err) => {
-            const resp: WalletMessageResponse = {
-              id: msg.id,
-              type: msg.type,
-              success: false,
-              error: err.message,
-            };
-
-            if (event.source) {
-              event.source.postMessage(resp, { targetOrigin: event.origin });
-            }
-          },
-          complete: () => window.close(),
-        });
-        return;
-    }
+      },
+      error: (err) => console.error(err),
+      complete: () => window.close(),
+    });
   }
+
 
   @HostListener('window:load', ['$event'])
   loadHandler($event: Event) {

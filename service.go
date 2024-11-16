@@ -1,12 +1,16 @@
 package wallet
 
 import (
+	"context"
+	"crypto/ed25519"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/mr-tron/base58"
 
 	"github.com/flarexio/identity/passkeys"
 	"github.com/flarexio/wallet/account"
@@ -25,6 +29,10 @@ type Service interface {
 	InitializeTransaction(req *InitializeTransactionRequest) (*protocol.CredentialAssertion, string, error)
 	FinalizeTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error)
 
+	CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error)
+	SessionData(ctx context.Context, session string) ([]byte, error)
+	AckSession(ctx context.Context, session string, data []byte) error
+
 	Close() error
 }
 
@@ -34,10 +42,15 @@ func NewService(accounts account.Repository, passkeys passkeys.Service, cfg conf
 		return nil, err
 	}
 
+	sessionKey := cfg.Keys.Session.Key
+	privkey := ed25519.NewKeyFromSeed(sessionKey[:])
+
 	return &service{
 		accounts: accounts,
 		keys:     keys,
 		passkeys: passkeys,
+		privkey:  privkey,
+		sessions: make(map[string][]*Session),
 	}, nil
 }
 
@@ -45,6 +58,16 @@ type service struct {
 	accounts account.Repository
 	keys     keys.Service
 	passkeys passkeys.Service
+	privkey  ed25519.PrivateKey
+	sessions map[string][]*Session
+	sync.Mutex
+}
+
+type Session struct {
+	data   []byte
+	sig    string
+	ch     chan<- []byte
+	cancel context.CancelFunc
 }
 
 func (svc *service) findOrCreate(subject string) (*account.Account, error) {
@@ -246,6 +269,117 @@ func (svc *service) FinalizeTransaction(req *protocol.ParsedCredentialAssertionD
 	}
 
 	return tokenStr, t.Transaction, nil
+}
+
+func (svc *service) CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error) {
+	sig := ed25519.Sign(svc.privkey, data)
+	basedSig := base58.Encode(sig)
+
+	ch := make(chan []byte)
+	ctx, cancel := context.WithCancel(ctx)
+
+	session := &Session{
+		data:   data,
+		sig:    basedSig,
+		ch:     ch,
+		cancel: cancel,
+	}
+
+	go svc.sessionTimeout(ctx, session)
+
+	svc.Lock()
+	defer svc.Unlock()
+
+	index := basedSig[:2]
+
+	sessions, ok := svc.sessions[index]
+	if !ok {
+		sessions = make([]*Session, 0)
+	}
+
+	for _, s := range sessions {
+		if s.sig == session.sig {
+			return "", nil, errors.New("session already exists")
+		}
+	}
+
+	svc.sessions[index] = append(sessions, session)
+
+	return basedSig, ch, nil
+}
+
+func (svc *service) sessionTimeout(ctx context.Context, session *Session) {
+	for {
+		select {
+		case <-ctx.Done():
+			close(session.ch)
+
+			svc.Lock()
+
+			index := session.sig[:2]
+			sessions, ok := svc.sessions[index]
+			if ok {
+				for i, s := range sessions {
+					if s == session {
+						svc.sessions[index] = append(sessions[:i], sessions[i+1:]...)
+						break
+					}
+				}
+
+				if len(svc.sessions[index]) == 0 {
+					delete(svc.sessions, index)
+				}
+			}
+
+			svc.Unlock()
+			return
+
+		case <-time.After(120 * time.Second):
+			session.ch <- nil
+			session.cancel()
+		}
+	}
+}
+
+func (svc *service) SessionData(ctx context.Context, session string) ([]byte, error) {
+	svc.Lock()
+	defer svc.Unlock()
+
+	index := session[:2]
+	sessions, ok := svc.sessions[index]
+	if !ok {
+		return nil, errors.New("session not found")
+	}
+
+	for _, s := range sessions {
+		if s.sig == session {
+			return s.data, nil
+		}
+	}
+
+	return nil, errors.New("session not found")
+}
+
+func (svc *service) AckSession(ctx context.Context, session string, data []byte) error {
+	svc.Lock()
+	defer svc.Unlock()
+
+	index := session[:2]
+	sessions, ok := svc.sessions[index]
+	if !ok {
+		return errors.New("session not found")
+	}
+
+	for _, s := range sessions {
+		if s.sig == session {
+			s.ch <- data
+			defer s.cancel()
+
+			return nil
+		}
+	}
+
+	return errors.New("session not found")
 }
 
 func (svc *service) Close() error {

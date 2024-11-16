@@ -4,6 +4,8 @@ keys:
     location: global
     keyRing: wallet
     key: main
+  session:
+    key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
 
 persistence:
   driver: composite

@@ -1,9 +1,14 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, concatMap, map, of, share } from 'rxjs';
+import { Observable, catchError, concatMap, map, of, share } from 'rxjs';
 
+import { 
+  WalletMessage, WalletMessageType, WalletMessageResponse,
+  TrustSitePayload, SignTransactionPayload, SignMessagePayload,
+} from '@flarex/wallet-adapter';
 import { CredentialRequestOptionsJSON, get } from "@github/webauthn-json";
 import { PublicKey, VersionedTransaction } from '@solana/web3.js';
+import * as base58 from 'bs58';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User } from './identity.service';
@@ -49,6 +54,104 @@ export class WalletService {
         return pubkey;
       })
     );
+  }
+
+  session(session: string): Observable<WalletMessage> {
+    return this.http.get(`${this.baseURL}/sessions/${session}`).pipe(
+      map((resp: any) => {
+        const based = resp.data as string;
+        const jsonStr = Buffer.from(based, 'base64').toString('utf-8');
+        return WalletMessage.deserialize(jsonStr);
+      }),
+    );
+  }
+
+  ackSession(session: string, resp: WalletMessageResponse): Observable<string> {
+    const data = resp.serialize();
+    const based = Buffer.from(data).toString('base64');
+
+    const body = {
+      data: based,
+    };
+
+    return this.http.post(`${this.baseURL}/sessions/${session}/ack`, body, 
+      { responseType: 'text' }
+    ).pipe(
+      map((resp) => resp as string),
+    );
+  }
+
+  messageHandler(msg: WalletMessage): Observable<WalletMessageResponse> {
+    switch (msg.type) {
+      case WalletMessageType.TRUST_SITE:
+        const trustSitePayload = msg.payload as TrustSitePayload;
+        trustSitePayload.accept = true;
+
+        // TODO: check if the site is trusted
+
+        return of(new WalletMessageResponse(
+          msg.id,
+          msg.type,
+          true,
+          undefined,
+          trustSitePayload,
+        ));
+
+      case WalletMessageType.SIGN_TRANSACTION:
+        const signTxPayload = msg.payload as SignTransactionPayload;
+        const bytes = Buffer.from(signTxPayload.tx);
+        const tx = VersionedTransaction.deserialize(bytes);
+
+        return this.signTransaction(msg.id, tx).pipe(
+          map((result) => {
+            const bytes = result.tx.serialize();
+            const sigs = result.tx.signatures;
+
+            return new WalletMessageResponse(
+              msg.id,
+              msg.type,
+              true,
+              undefined,
+              new SignTransactionPayload(bytes, sigs),
+            );
+          }),
+          catchError((err) => {
+            return of(new WalletMessageResponse(
+              msg.id,
+              msg.type,
+              false,
+              err.message,
+              undefined,
+            ));
+          }),
+        );
+
+      case WalletMessageType.SIGN_MESSAGE:
+        const signMsgPayload = msg.payload as SignMessagePayload;
+
+        return this.signMessage(msg.id, signMsgPayload.msg).pipe(
+          map((result) => {
+            const sig = base58.decode(result.sig);
+
+            return new WalletMessageResponse(
+              msg.id,
+              msg.type,
+              true,
+              undefined,
+              new SignMessagePayload(signMsgPayload.msg, sig),
+            );
+          }),
+          catchError((err) => {
+            return of(new WalletMessageResponse(
+              msg.id,
+              msg.type,
+              false,
+              err.message,
+              undefined,
+            ));
+          }),
+        );
+    }
   }
 
   signTransaction(tid: string, tx: VersionedTransaction): Observable<SignTransactionResponse> {
