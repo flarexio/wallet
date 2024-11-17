@@ -17,7 +17,7 @@ import { WalletMessage } from '@flarex/wallet-adapter';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 
 import { environment as env } from '../environments/environment';
-import { IdentityService, User } from './identity.service';
+import { IdentityService, User, SigninResult } from './identity.service';
 import { SolanaService, AssociatedTokenAccount } from './solana.service';
 import { WalletService } from './wallet.service';
 import { TokenTransferComponent } from './token-transfer/token-transfer.component';
@@ -71,22 +71,30 @@ export class AppComponent implements OnInit {
 
     this.lastSigninMethod = localStorage.getItem('last-signin-method');
 
-    let token = localStorage.getItem('passkeys-token');
+    const token = localStorage.getItem('token');
     if (token == null) return;
 
-    this.identityService.verifyToken(token).pipe(
-      concatMap(() => this.identityService.signin('passkeys', token)),
+    this.identityService.getUserFromToken(token).pipe(
       catchError((e) => {
         console.error(e);
 
-        localStorage.removeItem('passkeys-token');
-        return this.login();
+        let passkeysToken = localStorage.getItem('passkeys-token');
+        if (passkeysToken == null) {
+          throw new Error('passkeys token not found');
+        }
+
+        return this.identityService.verifyPasskeyToken(passkeysToken).pipe(
+          concatMap(() => this.signin('passkeys', passkeysToken)),
+          catchError((e) => {
+            console.error(e);
+
+            localStorage.removeItem('passkeys-token');
+            return this.passkeyLogin();
+          }),
+        );
       }),
     ).subscribe({
-      next: (user) => {
-        this.user = user;
-        localStorage.setItem('last-signin-method', 'passkeys');
-      },
+      next: (result) => this.user = result.user,
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     });
@@ -121,7 +129,7 @@ export class AppComponent implements OnInit {
       ).subscribe({
         next: (ok) => console.log(ok),
         error: (err) => console.error(err),
-        complete: () => console.log('complete'),
+        complete: () => window.close(),
       });
     }
   }
@@ -139,11 +147,11 @@ export class AppComponent implements OnInit {
     }
 
     // Handle wallet messages
-    const msg = WalletMessage.deserialize(event.data);
-    this.walletService.messageHandler(msg).subscribe({
+    const msg = event.data as WalletMessage;
+    this.walletService.messageHandler(msg)?.subscribe({
       next: (resp) => {
         if (event.source) {
-          event.source.postMessage(resp.serialize(), { targetOrigin: event.origin });
+          event.source.postMessage(resp, { targetOrigin: event.origin });
         }
       },
       error: (err) => console.error(err),
@@ -179,39 +187,43 @@ export class AppComponent implements OnInit {
   handleCredentialResponse(response: any) {
     const token: string = response.credential;
 
-    this.identityService.signin('google', token).subscribe({
-      next: (user) => {
-        this.user = user;
-        localStorage.setItem('last-signin-method', 'google');
-      },
+    this.signin('google', token).subscribe({
+      next: (result) => this.user = result.user,
       error: (err) => console.error(err),
       complete: () => this.changeDetectorRef.detectChanges(),
     })
   }
 
-  login(): Observable<User> {
+  passkeyLogin(): Observable<SigninResult> {
     return this.identityService.directPasskeyLogin().pipe(
-      concatMap((token) => this.identityService.verifyToken(token).pipe(
+      concatMap((token) => this.identityService.verifyPasskeyToken(token).pipe(
         map(() => token)
       )),
       concatMap((token) => {
         console.log("Passkeys token: " + token);
         localStorage.setItem('passkeys-token', token);
 
-        return this.identityService.signin('passkeys', token);
+        return this.signin('passkeys', token);
       })
     );
   }
 
-  loginHandler() {
-    this.login().subscribe({
-      next: (user) => {
-        this.user = user;
-        localStorage.setItem('last-signin-method', 'passkeys');
-      },
+  passkeyLoginHandler() {
+    this.passkeyLogin().subscribe({
+      next: (result) => this.user = result.user,
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })
+  }
+
+  signin(provider: string, token: string): Observable<SigninResult> {
+    return this.identityService.signin(provider, token).pipe(
+      map((result) => {
+        localStorage.setItem('last-signin-method', provider);
+        localStorage.setItem('token', result.token.token);
+        return result;
+      })
+    );
   }
 
   registerPasskey() {
@@ -220,6 +232,14 @@ export class AppComponent implements OnInit {
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     })
+  }
+
+  logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('last-signin-method');
+    localStorage.removeItem('passkeys-token');
+    this.user = undefined;
+    this.identityService.logout();
   }
 
   requestAirdrop() {

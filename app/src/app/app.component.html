@@ -9,7 +9,7 @@
 
       <!-- Sign in with a passkey -->
       <button mat-icon-button matTooltip="Sign in with a Passkey" 
-              (click)="loginHandler()">
+              (click)="passkeyLoginHandler()">
         <mat-icon fontSet="material-symbols-outlined">
           passkey
         </mat-icon>
@@ -39,17 +39,17 @@
           </mat-icon>
           Profile
         </button>
-        <button mat-menu-item disabled>
-          <mat-icon>
-            logout
-          </mat-icon>
-          Logout
-        </button>
         <button mat-menu-item (click)="registerPasskey()">
           <mat-icon fontSet="material-symbols-outlined">
             passkey
           </mat-icon>
           Register Passkey
+        </button>
+        <button mat-menu-item (click)="logout()">
+          <mat-icon>
+            logout
+          </mat-icon>
+          Logout
         </button>
       </mat-menu>
     }

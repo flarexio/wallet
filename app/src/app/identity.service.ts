@@ -28,9 +28,14 @@ export class IdentityService {
 
   constructor(
     private http: HttpClient,
-  ) { }
+  ) {
+    const passkeyUserID = localStorage.getItem('passkeys-user-id');
+    if (passkeyUserID != undefined) {
+      this._currentPasskeyUserID = passkeyUserID;
+    }
+  }
 
-  signin(provider: string, token: string): Observable<User> {
+  signin(provider: string, token: string): Observable<SigninResult> {
     const params = {
       'provider': provider,
       'credential': token,
@@ -43,7 +48,22 @@ export class IdentityService {
 
         this.currentToken = token;
         this.currentUser = user;
-        return user;
+        return { user, token };
+      }),
+    );
+  }
+
+  getUserFromToken(tokenStr: string): Observable<SigninResult> {
+    const headers = { 'Authorization': `Bearer ${tokenStr}` };
+
+    return this.http.get(`${this.baseURL}/token/user`, { headers }).pipe(
+      map((raw) => {
+        const user = raw as User;
+        const token = { token: tokenStr, expired_at: '' };
+
+        this.currentToken = token;
+        this.currentUser = user;
+        return { user, token };
       }),
     );
   }
@@ -86,7 +106,7 @@ export class IdentityService {
     );
   }
 
-  verifyToken(token: string): Observable<jose.JWTPayload> {
+  verifyPasskeyToken(token: string): Observable<jose.JWTPayload> {
     return from(jose.jwtVerify(token, this.JWKS, {
       audience: 'wallet.flarex.io'
     })).pipe(
@@ -96,6 +116,13 @@ export class IdentityService {
         return payload;
       })
     )
+  }
+
+  logout() {
+    localStorage.removeItem('passkeys-user-id');
+    this.currentUser = undefined;
+    this.currentToken = undefined;
+    this.currentPasskeyUserID = undefined;
   }
 
   refreshUser() {
@@ -125,7 +152,16 @@ export class IdentityService {
   }
   public set currentPasskeyUserID(userID: string | undefined) {
     this._currentPasskeyUserID = userID;
+
+    if (userID != undefined) {
+      localStorage.setItem('passkeys-user-id', userID);
+    }
   }
+}
+
+export interface SigninResult {
+  user: User;
+  token: Token;
 }
 
 export interface User {
