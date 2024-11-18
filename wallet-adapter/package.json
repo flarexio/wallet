@@ -1,6 +1,6 @@
 {
   "name": "@flarex/wallet-adapter",
-  "version": "1.0.3",
+  "version": "1.0.7",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
@@ -12,7 +12,7 @@
     "url": "git+https://github.com/flarexio/wallet.git"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "devDependencies": {
     "typescript": "^5.6.3"

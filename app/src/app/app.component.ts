@@ -140,7 +140,7 @@ export class AppComponent implements OnInit {
 
     // Check if the wallet is ready
     if (event.data == 'IS_READY') {
-      if (this.user != null) {
+      if (this.user != undefined) {
         event.source?.postMessage('WALLET_READY', { targetOrigin: event.origin });
       }
       return;

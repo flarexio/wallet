@@ -85,7 +85,14 @@ export class WalletService {
     switch (msg.type) {
       case WalletMessageType.TRUST_SITE:
         const trustSitePayload = msg.payload as TrustSitePayload;
-        trustSitePayload.accept = true;
+
+        const account = this.currentWallet;
+        if (account == null) {
+          trustSitePayload.accept = false;
+        } else {
+          trustSitePayload.accept = true;
+          trustSitePayload.pubkey = account.toBytes();
+        }
 
         // TODO: check if the site is trusted
 
