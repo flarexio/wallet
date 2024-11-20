@@ -50,7 +50,20 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
       return;
     }
 
-    await this.connect();
+    try {
+      const pubkey = localStorage.getItem('flarex_wallet_pubkey');
+      if (pubkey == null) {
+        throw new WalletNotConnectedError();
+      }
+
+      const publicKey = new PublicKey(pubkey);
+
+      this._publicKey = publicKey;
+      this.emit('connect', publicKey);
+    } catch (err: any) {
+      this.emit('error', err);
+      throw err;
+    }
   }
 
   async connect(): Promise<void> {
@@ -71,6 +84,8 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
       try {
         const pubkey = await wallet.getPublicKey();
 
+        localStorage.setItem('flarex_wallet_pubkey', pubkey.toBase58());
+
         this._publicKey = pubkey;
         this.emit('connect', pubkey);
       } catch (err: any) {
@@ -87,6 +102,8 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
   }
 
   async disconnect(): Promise<void> {
+    localStorage.removeItem('flarex_wallet_pubkey');
+
     this._publicKey = null;
     this.emit('disconnect');
   }

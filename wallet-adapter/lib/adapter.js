@@ -47,7 +47,19 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
             if (this.readyState != wallet_adapter_base_1.WalletReadyState.Installed) {
                 return;
             }
-            yield this.connect();
+            try {
+                const pubkey = localStorage.getItem('flarex_wallet_pubkey');
+                if (pubkey == null) {
+                    throw new wallet_adapter_base_1.WalletNotConnectedError();
+                }
+                const publicKey = new web3_js_1.PublicKey(pubkey);
+                this._publicKey = publicKey;
+                this.emit('connect', publicKey);
+            }
+            catch (err) {
+                this.emit('error', err);
+                throw err;
+            }
         });
     }
     connect() {
@@ -65,6 +77,7 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
                 }
                 try {
                     const pubkey = yield wallet.getPublicKey();
+                    localStorage.setItem('flarex_wallet_pubkey', pubkey.toBase58());
                     this._publicKey = pubkey;
                     this.emit('connect', pubkey);
                 }
@@ -83,6 +96,7 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
     }
     disconnect() {
         return __awaiter(this, void 0, void 0, function* () {
+            localStorage.removeItem('flarex_wallet_pubkey');
             this._publicKey = null;
             this.emit('disconnect');
         });
