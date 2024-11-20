@@ -16,7 +16,7 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
   name = FlarexWalletName;
   url = 'https://wallet.flarex.io';
   icon = 'https://wallet.flarex.io/favicon.ico';
-  supportedTransactionVersions: ReadonlySet<TransactionVersion> = new Set(['legacy', 0]);
+  supportedTransactionVersions: ReadonlySet<TransactionVersion> = new Set([0]);
 
   private _wallet: FlarexWallet | null = null;
   private _connecting: boolean = false;
@@ -43,6 +43,14 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
     }).catch(() => {
       this.readyState = WalletReadyState.Unsupported;
     });
+  }
+
+  async autoConnect(): Promise<void> {
+    if (this.readyState != WalletReadyState.Installed) {
+      return;
+    }
+
+    await this.connect();
   }
 
   async connect(): Promise<void> {
@@ -84,7 +92,29 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
   }
 
   async signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T> {
-    throw new WalletSignTransactionError();
+    try {
+      const wallet = this._wallet;
+      if (wallet == null) {
+        throw new WalletNotConnectedError();
+      }
+
+      if (transaction instanceof Transaction) {
+        throw new WalletSignTransactionError("legacy transaction is not supported");
+      }
+
+      try {
+        let tx = transaction as VersionedTransaction;
+        tx = await wallet.signTransaction(tx);
+        return tx as T;
+
+      } catch (err: any) {
+        throw new WalletSignTransactionError(err as string);
+      }
+
+    } catch (err: any) {
+      this.emit('error', err);
+      throw err;
+    }
   }
 
   async signMessage(message: Uint8Array): Promise<Uint8Array> {

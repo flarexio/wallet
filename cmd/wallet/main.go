@@ -130,32 +130,32 @@ func run(cli *cli.Context) error {
 				wallet.WalletHandler(endpoint))
 		}
 
-		// POST /accounts/:user/signature/initialize
+		// POST /accounts/:user/message-signatures
 		{
-			endpoint := wallet.InitializeSignatureEndpoint(svc)
-			api.POST("/accounts/:user/signature/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.InitializeSignatureHandler(endpoint))
+			endpoint := wallet.InitializeSignMessageEndpoint(svc)
+			api.POST("/accounts/:user/message-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.InitializeSignMessageHandler(endpoint))
 		}
 
-		// POST /accounts/:user/signature/finalize
+		// PUT /accounts/:user/message-signatures
 		{
-			endpoint := wallet.FinalizeSignatureEndpoint(svc)
-			api.POST("/accounts/:user/signature/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.FinalizeSignatureHandler(endpoint))
+			endpoint := wallet.FinalizeSignMessageEndpoint(svc)
+			api.PUT("/accounts/:user/message-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.FinalizeSignMessageHandler(endpoint))
 		}
 
-		// POST /accounts/:user/transaction/initialize
+		// POST /accounts/:user/transaction-signatures
 		{
-			endpoint := wallet.InitializeTransactionEndpoint(svc)
-			api.POST("/accounts/:user/transaction/initialize", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.InitializeTransactionHandler(endpoint))
+			endpoint := wallet.InitializeSignTransactionEndpoint(svc)
+			api.POST("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.InitializeSignTransactionHandler(endpoint))
 		}
 
-		// POST /accounts/:user/transaction/finalize
+		// PUT /accounts/:user/transaction-signatures
 		{
-			endpoint := wallet.FinalizeTransactionEndpoint(svc)
-			api.POST("/accounts/:user/transaction/finalize", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.FinalizeTransactionHandler(endpoint))
+			endpoint := wallet.FinalizeSignTransactionEndpoint(svc)
+			api.PUT("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
+				wallet.FinalizeSignTransactionHandler(endpoint))
 		}
 
 		// POST /sessions

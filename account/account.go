@@ -52,11 +52,11 @@ func (a *Account) Wallet() solana.PublicKey {
 	return solana.PublicKeyFromBytes(pub)
 }
 
-func (a *Account) Signature(data []byte) []byte {
+func (a *Account) Sign(data []byte) []byte {
 	return ed25519.Sign(a.PrivateKey, data)
 }
 
-func NewTransaction(id string, tx *solana.Transaction) (*Transaction, error) {
+func NewSignTransaction(id string, tx *solana.Transaction) (*Transaction, error) {
 	tid, err := ParseTransactionID(id)
 	if err != nil {
 		return nil, err
@@ -64,12 +64,12 @@ func NewTransaction(id string, tx *solana.Transaction) (*Transaction, error) {
 
 	return &Transaction{
 		TransactionID:   tid,
-		TransactionType: TransactionTypeTransaction,
+		TransactionType: SignTransaction,
 		Transaction:     tx,
 	}, nil
 }
 
-func NewMessageTransaction(id string, msg []byte) (*Transaction, error) {
+func NewSignMessageTransaction(id string, msg []byte) (*Transaction, error) {
 	tid, err := ParseTransactionID(id)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func NewMessageTransaction(id string, msg []byte) (*Transaction, error) {
 
 	return &Transaction{
 		TransactionID:   tid,
-		TransactionType: TransactionTypeMessage,
+		TransactionType: SignMessage,
 		Message:         msg,
 	}, nil
 }
@@ -100,8 +100,8 @@ func (id TransactionID) String() string {
 type TransactionType string
 
 const (
-	TransactionTypeTransaction TransactionType = "transaction"
-	TransactionTypeMessage     TransactionType = "message"
+	SignTransaction TransactionType = "sign_transaction"
+	SignMessage     TransactionType = "sign_message"
 )
 
 type Transaction struct {
@@ -134,7 +134,7 @@ func (tx *Transaction) UnmarshalJSON(data []byte) error {
 	tx.TransactionType = raw.TransactionType
 
 	switch raw.TransactionType {
-	case TransactionTypeTransaction:
+	case SignTransaction:
 		transaction, err := solana.TransactionFromBytes(raw.Transaction)
 		if err != nil {
 			return err
@@ -143,7 +143,7 @@ func (tx *Transaction) UnmarshalJSON(data []byte) error {
 		tx.Transaction = transaction
 		tx.Signature = raw.Signature
 
-	case TransactionTypeMessage:
+	case SignMessage:
 		tx.Message = raw.Message
 		tx.Signature = raw.Signature
 	}
@@ -164,7 +164,7 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 	}
 
 	switch tx.TransactionType {
-	case TransactionTypeTransaction:
+	case SignTransaction:
 		bs, err := tx.Transaction.MarshalBinary()
 		if err != nil {
 			return nil, err
@@ -173,7 +173,7 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		out.Transaction = bs
 		out.Signature = tx.Signature
 
-	case TransactionTypeMessage:
+	case SignMessage:
 		out.Message = tx.Message
 		out.Signature = tx.Signature
 	}

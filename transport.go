@@ -62,7 +62,7 @@ func SignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	}
 }
 
-func InitializeSignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func InitializeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
@@ -71,7 +71,7 @@ func InitializeSignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *InitializeSignatureRequest
+		var req *InitializeSignMessageRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -92,7 +92,7 @@ func InitializeSignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	}
 }
 
-func FinalizeSignatureHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func FinalizeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {
@@ -143,7 +143,7 @@ func SignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	}
 }
 
-func InitializeTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func InitializeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
@@ -152,7 +152,7 @@ func InitializeTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *InitializeTransactionRequest
+		var req *InitializeSignTransactionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -173,7 +173,7 @@ func InitializeTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	}
 }
 
-func FinalizeTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
+func FinalizeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {

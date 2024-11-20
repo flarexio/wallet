@@ -15,6 +15,7 @@ export declare class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter 
     private _publicKey;
     private _readyState;
     constructor(config?: FlarexWalletAdapterConfig);
+    autoConnect(): Promise<void>;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T>;

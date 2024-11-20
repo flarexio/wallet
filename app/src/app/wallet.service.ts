@@ -19,6 +19,7 @@ import { IdentityService, User } from './identity.service';
 export class WalletService {
   private baseURL = env.FLAREX_WALLET_BASEURL + '/wallet/v1';
 
+  private _responseCallback: ((resp: WalletMessageResponse) => void) | undefined;
   private _currentWallet: PublicKey | null = null;
 
   walletChange: Observable<PublicKey | null>;
@@ -190,9 +191,9 @@ export class WalletService {
       transaction_data: base64,
     };
 
-    return this.http.post(`${this.baseURL}/accounts/${user}/transaction/initialize`, body, { headers },).pipe(
+    return this.http.post(`${this.baseURL}/accounts/${user}/transaction-signatures`, body, { headers },).pipe(
       concatMap((opts) => get(opts as CredentialRequestOptionsJSON)),
-      concatMap((credential) => this.http.post(`${this.baseURL}/accounts/${user}/transaction/finalize`, credential, { headers })),
+      concatMap((credential) => this.http.put(`${this.baseURL}/accounts/${user}/transaction-signatures`, credential, { headers })),
       map((raw: any) => {
         const token = raw.token as string;
         const bytes = Buffer.from(raw.tx, 'base64');
@@ -232,9 +233,9 @@ export class WalletService {
       transaction_data: base64,
     };
 
-    return this.http.post(`${this.baseURL}/accounts/${user}/signature/initialize`, body, { headers },).pipe(
+    return this.http.post(`${this.baseURL}/accounts/${user}/message-signatures`, body, { headers },).pipe(
       concatMap((opts) => get(opts as CredentialRequestOptionsJSON)),
-      concatMap((credential) => this.http.post(`${this.baseURL}/accounts/${user}/signature/finalize`, credential, { headers })),
+      concatMap((credential) => this.http.put(`${this.baseURL}/accounts/${user}/message-signatures`, credential, { headers })),
       map((raw: any) => {
         const token = raw.token as string;
         const sig = raw.sig as string;
@@ -242,6 +243,20 @@ export class WalletService {
         return { token, msg, sig };
       }),
     );
+  }
+
+  sendResponse(resp: WalletMessageResponse) {
+    if (this._responseCallback) {
+      this._responseCallback(resp);
+    }
+  }
+
+  public set responseCallback(callback: ((resp: WalletMessageResponse) => void) | undefined) {
+    this._responseCallback = callback;
+  }
+
+  public clearResponseCallback() {
+    this._responseCallback = undefined;
   }
 
   public get currentWallet(): PublicKey | null {

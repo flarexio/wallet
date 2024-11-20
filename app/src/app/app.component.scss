@@ -16,6 +16,11 @@
   margin: 40px auto;
 }
 
+.wallet-card mat-card-title {
+  cursor: pointer;
+}
+
 .wallet-card mat-card-content {
+  padding: 20px;
   height: 100%;
 }

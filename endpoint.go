@@ -39,21 +39,21 @@ func SignMessageEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
-type InitializeSignatureRequest struct {
+type InitializeSignMessageRequest struct {
 	Subject         string `json:"-"`
 	UserID          string `json:"user_id"`
 	TransactionID   string `json:"transaction_id"`
 	TransactionData []byte `json:"transaction_data"`
 }
 
-func InitializeSignatureEndpoint(svc Service) endpoint.Endpoint {
+func InitializeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req, ok := request.(*InitializeSignatureRequest)
+		req, ok := request.(*InitializeSignMessageRequest)
 		if !ok {
 			return nil, errors.New("invalid request")
 		}
 
-		opts, mediation, err := svc.InitializeSignature(req)
+		opts, mediation, err := svc.InitializeSignMessage(req)
 		if err != nil {
 			return nil, err
 		}
@@ -67,24 +67,24 @@ func InitializeSignatureEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
-type FinalizeSignatureResponse struct {
+type FinalizeSignMessageResponse struct {
 	Token     string           `json:"token"`
 	Signature solana.Signature `json:"sig"`
 }
 
-func FinalizeSignatureEndpoint(svc Service) endpoint.Endpoint {
+func FinalizeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req, ok := request.(*protocol.ParsedCredentialAssertionData)
 		if !ok {
 			return nil, errors.New("invalid type")
 		}
 
-		token, sig, err := svc.FinalizeSignature(req)
+		token, sig, err := svc.FinalizeSignMessage(req)
 		if err != nil {
 			return nil, err
 		}
 
-		resp := &FinalizeSignatureResponse{
+		resp := &FinalizeSignMessageResponse{
 			Token:     token,
 			Signature: sig,
 		}
@@ -155,14 +155,14 @@ func SignTransactionEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
-type InitializeTransactionRequest struct {
+type InitializeSignTransactionRequest struct {
 	Subject       string
 	UserID        string
 	TransactionID string
 	Transaction   *solana.Transaction
 }
 
-func (req *InitializeTransactionRequest) UnmarshalJSON(data []byte) error {
+func (req *InitializeSignTransactionRequest) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		Subject       string `json:"-"`
 		UserID        string `json:"user_id"`
@@ -187,14 +187,14 @@ func (req *InitializeTransactionRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func InitializeTransactionEndpoint(svc Service) endpoint.Endpoint {
+func InitializeSignTransactionEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req, ok := request.(*InitializeTransactionRequest)
+		req, ok := request.(*InitializeSignTransactionRequest)
 		if !ok {
 			return nil, errors.New("invalid request")
 		}
 
-		opts, mediation, err := svc.InitializeTransaction(req)
+		opts, mediation, err := svc.InitializeSignTransaction(req)
 		if err != nil {
 			return nil, err
 		}
@@ -208,12 +208,12 @@ func InitializeTransactionEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
-type FinalizeTransactionResponse struct {
+type FinalizeSignTransactionResponse struct {
 	Token       string
 	Transaction *solana.Transaction
 }
 
-func (resp *FinalizeTransactionResponse) MarshalJSON() ([]byte, error) {
+func (resp *FinalizeSignTransactionResponse) MarshalJSON() ([]byte, error) {
 	bs, err := resp.Transaction.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -230,19 +230,19 @@ func (resp *FinalizeTransactionResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-func FinalizeTransactionEndpoint(svc Service) endpoint.Endpoint {
+func FinalizeSignTransactionEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
 		req, ok := request.(*protocol.ParsedCredentialAssertionData)
 		if !ok {
 			return nil, errors.New("invalid type")
 		}
 
-		token, transaction, err := svc.FinalizeTransaction(req)
+		token, transaction, err := svc.FinalizeSignTransaction(req)
 		if err != nil {
 			return nil, err
 		}
 
-		resp := &FinalizeTransactionResponse{
+		resp := &FinalizeSignTransactionResponse{
 			Token:       token,
 			Transaction: transaction,
 		}

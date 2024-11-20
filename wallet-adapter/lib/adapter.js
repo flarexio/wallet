@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FlarexWalletAdapter = exports.FlarexWalletName = void 0;
+const web3_js_1 = require("@solana/web3.js");
 const wallet_adapter_base_1 = require("@solana/wallet-adapter-base");
 const wallet_1 = require("./wallet");
 exports.FlarexWalletName = 'FlareX';
@@ -19,7 +20,7 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
         this.name = exports.FlarexWalletName;
         this.url = 'https://wallet.flarex.io';
         this.icon = 'https://wallet.flarex.io/favicon.ico';
-        this.supportedTransactionVersions = new Set(['legacy', 0]);
+        this.supportedTransactionVersions = new Set([0]);
         this._wallet = null;
         this._connecting = false;
         this._publicKey = null;
@@ -39,6 +40,14 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
             }
         }).catch(() => {
             this.readyState = wallet_adapter_base_1.WalletReadyState.Unsupported;
+        });
+    }
+    autoConnect() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.readyState != wallet_adapter_base_1.WalletReadyState.Installed) {
+                return;
+            }
+            yield this.connect();
         });
     }
     connect() {
@@ -80,7 +89,27 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
     }
     signTransaction(transaction) {
         return __awaiter(this, void 0, void 0, function* () {
-            throw new wallet_adapter_base_1.WalletSignTransactionError();
+            try {
+                const wallet = this._wallet;
+                if (wallet == null) {
+                    throw new wallet_adapter_base_1.WalletNotConnectedError();
+                }
+                if (transaction instanceof web3_js_1.Transaction) {
+                    throw new wallet_adapter_base_1.WalletSignTransactionError("legacy transaction is not supported");
+                }
+                try {
+                    let tx = transaction;
+                    tx = yield wallet.signTransaction(tx);
+                    return tx;
+                }
+                catch (err) {
+                    throw new wallet_adapter_base_1.WalletSignTransactionError(err);
+                }
+            }
+            catch (err) {
+                this.emit('error', err);
+                throw err;
+            }
         });
     }
     signMessage(message) {

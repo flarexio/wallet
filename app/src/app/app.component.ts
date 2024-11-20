@@ -1,6 +1,7 @@
 import { AsyncPipe, CurrencyPipe, SlicePipe } from '@angular/common';
 import { Component, ChangeDetectorRef, HostListener, OnInit } from '@angular/core';
-import { Observable, catchError, concatMap, filter, interval, map, of, switchMap, take } from 'rxjs';
+import { RouterOutlet, Router } from '@angular/router';
+import { Observable, catchError, concatMap, filter, forkJoin, interval, map, of, switchMap, take } from 'rxjs';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -13,14 +14,13 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { WalletMessage } from '@flarex/wallet-adapter';
+import { WalletMessage, WalletMessageType, WalletMessageResponse } from '@flarex/wallet-adapter';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User, SigninResult } from './identity.service';
 import { SolanaService, AssociatedTokenAccount } from './solana.service';
 import { WalletService } from './wallet.service';
-import { TokenTransferComponent } from './token-transfer/token-transfer.component';
 
 declare var google: any;
 
@@ -31,6 +31,7 @@ declare var google: any;
     AsyncPipe,
     CurrencyPipe,
     SlicePipe,
+    RouterOutlet,
     MatButtonModule,
     MatButtonToggleModule,
     MatCardModule,
@@ -41,7 +42,6 @@ declare var google: any;
     MatSidenavModule,
     MatToolbarModule,
     MatTooltipModule,
-    TokenTransferComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
@@ -50,23 +50,22 @@ export class AppComponent implements OnInit {
   user: User | undefined = undefined;
   lastSigninMethod: string | null = null;
 
-  account: Observable<string> = of('');
-  balance: Observable<number> = of(0);
+  account: Observable<{ account: string, balance: number }> = of({ account: '', balance: 0 });
   tokenAccounts: Observable<AssociatedTokenAccount[]> = of([]);
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
+    private router: Router,
     private snackBar: MatSnackBar,
     private identityService: IdentityService,
     private solanaService: SolanaService,
     private walletService: WalletService,
   ) {
     this.account = this.walletService.walletChange.pipe(
-      concatMap((pubkey) => this.solanaService.getAccount(pubkey)),
-    );
-
-    this.balance = this.walletService.walletChange.pipe(
-      concatMap((pubkey) => this.solanaService.getBalance(pubkey)),
+      concatMap((pubkey) => forkJoin({
+        account: this.solanaService.getAccount(pubkey),
+        balance: this.solanaService.getBalance(pubkey),
+      })),
     );
 
     this.lastSigninMethod = localStorage.getItem('last-signin-method');
@@ -146,19 +145,33 @@ export class AppComponent implements OnInit {
       return;
     }
 
+    this.walletService.responseCallback = (resp) => {
+      if (event.source) {
+        event.source.postMessage(resp, { targetOrigin: event.origin });
+      }
+    }
+
     // Handle wallet messages
     const msg = event.data as WalletMessage;
-    this.walletService.messageHandler(msg)?.subscribe({
-      next: (resp) => {
-        if (event.source) {
-          event.source.postMessage(resp, { targetOrigin: event.origin });
-        }
-      },
-      error: (err) => console.error(err),
-      complete: () => window.close(),
-    });
-  }
+    switch (msg.type) {
+      case WalletMessageType.SIGN_MESSAGE:
+        this.router.navigate(['/sign-message'], { 
+          state: { msg }
+        });
+        break;
 
+      case WalletMessageType.SIGN_TRANSACTION:
+        break;
+
+      default:
+        this.walletService.messageHandler(msg)?.subscribe({
+          next: (resp) => this.walletService.sendResponse(resp),
+          error: (err) => console.error(err),
+          complete: () => window.close(),
+        });
+        break;
+    }
+  }
 
   @HostListener('window:load', ['$event'])
   loadHandler($event: Event) {

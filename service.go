@@ -22,12 +22,12 @@ type Service interface {
 	Wallet(subject string) (solana.PublicKey, error)
 
 	SignMessage(subject string, message []byte) (solana.Signature, error)
-	InitializeSignature(req *InitializeSignatureRequest) (*protocol.CredentialAssertion, string, error)
-	FinalizeSignature(req *protocol.ParsedCredentialAssertionData) (string, solana.Signature, error)
+	InitializeSignMessage(req *InitializeSignMessageRequest) (*protocol.CredentialAssertion, string, error)
+	FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (string, solana.Signature, error)
 
 	SignTransaction(subject string, transaction *solana.Transaction) ([]solana.Signature, error)
-	InitializeTransaction(req *InitializeTransactionRequest) (*protocol.CredentialAssertion, string, error)
-	FinalizeTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error)
+	InitializeSignTransaction(req *InitializeSignTransactionRequest) (*protocol.CredentialAssertion, string, error)
+	FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error)
 
 	CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error)
 	SessionData(ctx context.Context, session string) ([]byte, error)
@@ -114,7 +114,7 @@ func (svc *service) SignMessage(subject string, message []byte) (solana.Signatur
 	return privkey.Sign(message)
 }
 
-func (svc *service) InitializeSignature(req *InitializeSignatureRequest) (*protocol.CredentialAssertion, string, error) {
+func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*protocol.CredentialAssertion, string, error) {
 	r := &passkeys.InitializeTransactionRequest{
 		UserID:          req.UserID,
 		TransactionID:   req.TransactionID,
@@ -131,7 +131,7 @@ func (svc *service) InitializeSignature(req *InitializeSignatureRequest) (*proto
 		return nil, "", err
 	}
 
-	t, err := account.NewMessageTransaction(req.TransactionID, req.TransactionData)
+	t, err := account.NewSignMessageTransaction(req.TransactionID, req.TransactionData)
 	if err != nil {
 		return nil, "", err
 	}
@@ -145,7 +145,7 @@ func (svc *service) InitializeSignature(req *InitializeSignatureRequest) (*proto
 	return opts, mediation, nil
 }
 
-func (svc *service) FinalizeSignature(req *protocol.ParsedCredentialAssertionData) (string, solana.Signature, error) {
+func (svc *service) FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (string, solana.Signature, error) {
 	var sig solana.Signature
 
 	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
@@ -201,7 +201,7 @@ func (svc *service) SignTransaction(subject string, transaction *solana.Transact
 	return transaction.Sign(getter)
 }
 
-func (svc *service) InitializeTransaction(req *InitializeTransactionRequest) (*protocol.CredentialAssertion, string, error) {
+func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequest) (*protocol.CredentialAssertion, string, error) {
 	data, err := req.Transaction.MarshalBinary()
 	if err != nil {
 		return nil, "", err
@@ -223,7 +223,7 @@ func (svc *service) InitializeTransaction(req *InitializeTransactionRequest) (*p
 		return nil, "", err
 	}
 
-	t, err := account.NewTransaction(req.TransactionID, req.Transaction)
+	t, err := account.NewSignTransaction(req.TransactionID, req.Transaction)
 	if err != nil {
 		return nil, "", err
 	}
@@ -237,7 +237,7 @@ func (svc *service) InitializeTransaction(req *InitializeTransactionRequest) (*p
 	return opts, mediation, nil
 }
 
-func (svc *service) FinalizeTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error) {
+func (svc *service) FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error) {
 	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
 	if err != nil {
 		return "", nil, err

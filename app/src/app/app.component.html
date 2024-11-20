@@ -56,29 +56,19 @@
     </mat-toolbar>
   </header>
 
-  <mat-card class="wallet-card">
+  <mat-card class="wallet-card" appearance="outlined">
+  @if (account | async; as result) {
     <mat-card-header>
-    @if (account | async; as a) {
-      <mat-card-title [matTooltip]="a">
-        {{ (a | slice: 0:6) + '...' + (a | slice: -6) }}
+      <mat-card-title [matTooltip]="result.account" 
+                      (click)="copyAccount(result.account)">
+        {{ result.account | slice: 0:6 }}...{{ result.account | slice: -6 }}
       </mat-card-title>
-
-      <!-- <button mat-icon-button [matTooltip]="a"
-              (click)="copyAccount(a)">
-        <mat-icon>content_copy</mat-icon>
-      </button>
-
-      <button mat-icon-button matTooltip="Browse"
-              (click)="browseAccount(a, network)">
-        <mat-icon>open_in_new</mat-icon>
-      </button> -->
-    }
-
-      <mat-card-subtitle>{{ balance | async | currency: '◎' }}</mat-card-subtitle>
+      <mat-card-subtitle>{{ result.balance | currency: '◎' }}</mat-card-subtitle>
     </mat-card-header>
+  }
 
     <mat-card-content>
-      <app-token-transfer></app-token-transfer>
+      <router-outlet></router-outlet>
     </mat-card-content>
   </mat-card>
 </mat-drawer-container>
