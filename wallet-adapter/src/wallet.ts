@@ -99,39 +99,6 @@ export class FlarexWallet {
     });
   }
 
-  signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction> {
-    return new Promise((resolve, reject) => {
-      if (this.todo != null) {
-        reject(new Error('wallet is busy'));
-        return;
-      }
-
-      this.openWindow();
-
-      // sign transaction
-      const msg = new WalletMessage(
-        uuid(),
-        WalletMessageType.SIGN_TRANSACTION,
-        window.location.origin,
-        new SignTransactionPayload(tx.serialize()),
-      );
-
-      this.messageCallbacks.set(msg.id, (resp: WalletMessageResponse) => {
-        if (!resp.success) {
-          reject(new Error(resp.error));
-          return;
-        }
-
-        const payload = resp.payload as SignTransactionPayload;
-        const tx = VersionedTransaction.deserialize(payload.tx);
-
-        resolve(tx);
-      });
-
-      this.todo = msg;
-    });
-  }
-
   signMessage(message: Uint8Array): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
       if (this.todo != null) {
@@ -156,13 +123,50 @@ export class FlarexWallet {
         }
 
         const payload = resp.payload as SignMessagePayload;
-        const sig = payload.sig;
+        const sig = payload.signature;
         if (sig == undefined) {
           reject(new Error('no sig'));
           return;
         }
 
         resolve(sig);
+      });
+
+      this.todo = msg;
+    });
+  }
+
+  signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+    return new Promise((resolve, reject) => {
+      if (this.todo != null) {
+        reject(new Error('wallet is busy'));
+        return;
+      }
+
+      this.openWindow();
+
+      // sign transaction
+      const versioned = tx instanceof VersionedTransaction;
+
+      const msg = new WalletMessage(
+        uuid(),
+        WalletMessageType.SIGN_TRANSACTION,
+        window.location.origin,
+        new SignTransactionPayload(tx.serialize(), versioned),
+      );
+
+      this.messageCallbacks.set(msg.id, (resp: WalletMessageResponse) => {
+        if (!resp.success) {
+          reject(new Error(resp.error));
+          return;
+        }
+
+        const payload = resp.payload as SignTransactionPayload;
+        const tx = versioned ? 
+          VersionedTransaction.deserialize(payload.transaction) : 
+          Transaction.from(payload.transaction);
+
+        resolve(tx as T);
       });
 
       this.todo = msg;

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WalletMessageResponse = exports.SignMessagePayload = exports.SignTransactionPayload = exports.TrustSitePayload = exports.WalletMessage = exports.WalletMessageType = void 0;
+exports.WalletMessageResponse = exports.SignTransactionPayload = exports.SignMessagePayload = exports.TrustSitePayload = exports.WalletMessage = exports.WalletMessageType = void 0;
 var WalletMessageType;
 (function (WalletMessageType) {
     WalletMessageType["TRUST_SITE"] = "TRUST_SITE";
@@ -21,13 +21,13 @@ class WalletMessage {
                 const trustSitePayload = this.payload;
                 payload = trustSitePayload.serialize();
                 break;
-            case WalletMessageType.SIGN_TRANSACTION:
-                const signTransactionPayload = this.payload;
-                payload = signTransactionPayload.serialize();
-                break;
             case WalletMessageType.SIGN_MESSAGE:
                 const signMessagePayload = this.payload;
                 payload = signMessagePayload.serialize();
+                break;
+            case WalletMessageType.SIGN_TRANSACTION:
+                const signTransactionPayload = this.payload;
+                payload = signTransactionPayload.serialize();
                 break;
         }
         return JSON.stringify({
@@ -44,11 +44,11 @@ class WalletMessage {
             case WalletMessageType.TRUST_SITE:
                 payload = TrustSitePayload.deserialize(value.payload);
                 break;
-            case WalletMessageType.SIGN_TRANSACTION:
-                payload = SignTransactionPayload.deserialize(value.payload);
-                break;
             case WalletMessageType.SIGN_MESSAGE:
                 payload = SignMessagePayload.deserialize(value.payload);
+                break;
+            case WalletMessageType.SIGN_TRANSACTION:
+                payload = SignTransactionPayload.deserialize(value.payload);
                 break;
             default:
                 throw new Error(`unknown message type: ${value.type}`);
@@ -88,56 +88,59 @@ class TrustSitePayload {
     }
 }
 exports.TrustSitePayload = TrustSitePayload;
-class SignTransactionPayload {
-    constructor(tx, sigs) {
-        this.tx = tx;
-        this.sigs = sigs;
-    }
-    serialize() {
-        const tx = Buffer.from(this.tx).toString('base64');
-        let sigs = undefined;
-        if (this.sigs != undefined) {
-            sigs = this.sigs.map((sig) => Buffer.from(sig).toString('base64'));
-        }
-        return JSON.stringify({ tx, sigs });
-    }
-    static deserialize(payload) {
-        const value = JSON.parse(payload);
-        const tx = Buffer.from(value.tx, 'base64');
-        let sigs = undefined;
-        if (value.sigs != undefined) {
-            sigs = value.sigs.map((sig) => Buffer.from(sig, 'base64'));
-        }
-        return new SignTransactionPayload(tx, sigs);
-    }
-}
-exports.SignTransactionPayload = SignTransactionPayload;
 class SignMessagePayload {
-    constructor(msg, sig) {
-        this.msg = msg;
-        this.sig = sig;
+    constructor(message, signature) {
+        this.message = message;
+        this.signature = signature;
     }
     serialize() {
-        const msg = Buffer.from(this.msg).toString('base64');
-        let sig = undefined;
-        if (this.sig != undefined) {
-            sig = Buffer.from(this.sig).toString('base64');
+        const message = Buffer.from(this.message).toString('base64');
+        let signature = undefined;
+        if (this.signature != undefined) {
+            signature = Buffer.from(this.signature).toString('base64');
         }
-        return JSON.stringify({ msg, sig });
+        return JSON.stringify({ message, signature });
     }
     static deserialize(payload) {
         const value = JSON.parse(payload);
-        const msg = Buffer.from(value.msg, 'base64');
-        let sig = undefined;
-        if (value.sig != undefined) {
-            sig = Buffer.from(value.sig, 'base64');
+        const message = Buffer.from(value.message, 'base64');
+        let signature = undefined;
+        if (value.signature != undefined) {
+            signature = Buffer.from(value.signature, 'base64');
         }
-        return new SignMessagePayload(msg, sig);
+        return new SignMessagePayload(message, signature);
     }
 }
 exports.SignMessagePayload = SignMessagePayload;
+class SignTransactionPayload {
+    constructor(transaction, versioned, signatures) {
+        this.transaction = transaction;
+        this.versioned = versioned;
+        this.signatures = signatures;
+    }
+    serialize() {
+        const transaction = Buffer.from(this.transaction).toString('base64');
+        const versioned = this.versioned;
+        let signatures = undefined;
+        if (this.signatures != undefined) {
+            signatures = this.signatures.map((sig) => Buffer.from(sig).toString('base64'));
+        }
+        return JSON.stringify({ transaction, versioned, signatures });
+    }
+    static deserialize(payload) {
+        const value = JSON.parse(payload);
+        const transaction = Buffer.from(value.transaction, 'base64');
+        const versioned = value.versioned;
+        let signatures = undefined;
+        if (value.signatures != undefined) {
+            signatures = value.signatures.map((sig) => Buffer.from(sig, 'base64'));
+        }
+        return new SignTransactionPayload(transaction, versioned, signatures);
+    }
+}
+exports.SignTransactionPayload = SignTransactionPayload;
 class WalletMessageResponse {
-    constructor(id, type, success, error, payload) {
+    constructor(id, type, success, payload, error) {
         this.id = id;
         this.type = type;
         this.success = success;
@@ -150,10 +153,10 @@ class WalletMessageResponse {
             case WalletMessageType.TRUST_SITE:
                 payload = this.payload.serialize();
                 break;
-            case WalletMessageType.SIGN_TRANSACTION:
+            case WalletMessageType.SIGN_MESSAGE:
                 payload = this.payload.serialize();
                 break;
-            case WalletMessageType.SIGN_MESSAGE:
+            case WalletMessageType.SIGN_TRANSACTION:
                 payload = this.payload.serialize();
                 break;
         }
@@ -172,16 +175,16 @@ class WalletMessageResponse {
             case WalletMessageType.TRUST_SITE:
                 payload = TrustSitePayload.deserialize(value.payload);
                 break;
-            case WalletMessageType.SIGN_TRANSACTION:
-                payload = SignTransactionPayload.deserialize(value.payload);
-                break;
             case WalletMessageType.SIGN_MESSAGE:
                 payload = SignMessagePayload.deserialize(value.payload);
+                break;
+            case WalletMessageType.SIGN_TRANSACTION:
+                payload = SignTransactionPayload.deserialize(value.payload);
                 break;
             default:
                 throw new Error(`unknown message type: ${value.type}`);
         }
-        return new WalletMessageResponse(value.id, value.type, value.success, value.error, payload);
+        return new WalletMessageResponse(value.id, value.type, value.success, payload, value.error);
     }
 }
 exports.WalletMessageResponse = WalletMessageResponse;

@@ -51,17 +51,17 @@ export class SignMessageComponent {
     this.msg = msg;
 
     const payload = msg.payload as SignMessagePayload;
-    const msgStr = new TextDecoder().decode(payload.msg);
+    const msgStr = Buffer.from(payload.message).toString();
     this.message = msgStr;
   }
 
   signMessage(message: string) {
     if (this.msg == undefined) {
       const tid = uuid();
-      const msg = new TextEncoder().encode(message);
+      const msg = Buffer.from(message);
 
       this.walletService.signMessage(tid, msg).subscribe({
-        next: (result) => this.signature = result.sig,
+        next: (result) => this.signature = result.signature,
         error: (err) => console.error(err),
         complete: () => console.log('complete'),
       });
@@ -69,8 +69,8 @@ export class SignMessageComponent {
       this.walletService.messageHandler(this.msg).subscribe({
         next: (resp) => {
           const payload = resp.payload as SignMessagePayload;
-          if (payload.sig) {
-            const sig = base58.encode(payload.sig);
+          if (payload.signature) {
+            const sig = base58.encode(payload.signature);
             this.signature = sig;
           }
 
@@ -82,14 +82,12 @@ export class SignMessageComponent {
     }
   }
 
-  onDisplayChange(display: string) {
+  displayChangeHandler(display: string) {
     const msg = this.msg;
     if (msg == undefined) return;
 
     const payload = msg.payload as SignMessagePayload;
-    const msgStr = new TextDecoder().decode(payload.msg);
-    console.log(msgStr);
-
+    const msgStr = Buffer.from(payload.message).toString();
     switch (display) {
       case 'json':
         const msg = JSON.parse(msgStr);

@@ -40,10 +40,10 @@ func SignMessageEndpoint(svc Service) endpoint.Endpoint {
 }
 
 type InitializeSignMessageRequest struct {
-	Subject         string `json:"-"`
-	UserID          string `json:"user_id"`
-	TransactionID   string `json:"transaction_id"`
-	TransactionData []byte `json:"transaction_data"`
+	Subject       string `json:"-"`
+	UserID        string `json:"user_id"`
+	TransactionID string `json:"transaction_id"`
+	Message       []byte `json:"message"`
 }
 
 func InitializeSignMessageEndpoint(svc Service) endpoint.Endpoint {
@@ -68,8 +68,7 @@ func InitializeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 }
 
 type FinalizeSignMessageResponse struct {
-	Token     string           `json:"token"`
-	Signature solana.Signature `json:"sig"`
+	Signature solana.Signature `json:"signature"`
 }
 
 func FinalizeSignMessageEndpoint(svc Service) endpoint.Endpoint {
@@ -79,13 +78,12 @@ func FinalizeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 			return nil, errors.New("invalid type")
 		}
 
-		token, sig, err := svc.FinalizeSignMessage(req)
+		sig, err := svc.FinalizeSignMessage(req)
 		if err != nil {
 			return nil, err
 		}
 
 		resp := &FinalizeSignMessageResponse{
-			Token:     token,
 			Signature: sig,
 		}
 
@@ -101,7 +99,7 @@ type SignTransactionRequest struct {
 func (req *SignTransactionRequest) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		Subject     string `json:"-"`
-		Transaction []byte `json:"tx"`
+		Transaction []byte `json:"transaction"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -120,6 +118,7 @@ func (req *SignTransactionRequest) UnmarshalJSON(data []byte) error {
 
 type SignTransactionResponse struct {
 	Transaction *solana.Transaction
+	Signatures  []solana.Signature
 }
 
 func (resp *SignTransactionResponse) MarshalJSON() ([]byte, error) {
@@ -129,8 +128,12 @@ func (resp *SignTransactionResponse) MarshalJSON() ([]byte, error) {
 	}
 
 	out := struct {
-		Transaction []byte `json:"tx"`
-	}{Transaction: bs}
+		Transaction []byte             `json:"transaction"`
+		Signatures  []solana.Signature `json:"signatures"`
+	}{
+		Transaction: bs,
+		Signatures:  resp.Signatures,
+	}
 
 	return json.Marshal(out)
 }
@@ -142,13 +145,14 @@ func SignTransactionEndpoint(svc Service) endpoint.Endpoint {
 			return nil, errors.New("invalid request")
 		}
 
-		_, err := svc.SignTransaction(req.Subject, req.Transaction)
+		sigs, err := svc.SignTransaction(req.Subject, req.Transaction)
 		if err != nil {
 			return nil, err
 		}
 
 		resp := &SignTransactionResponse{
 			Transaction: req.Transaction,
+			Signatures:  sigs,
 		}
 
 		return resp, nil
@@ -160,6 +164,7 @@ type InitializeSignTransactionRequest struct {
 	UserID        string
 	TransactionID string
 	Transaction   *solana.Transaction
+	Versioned     bool
 }
 
 func (req *InitializeSignTransactionRequest) UnmarshalJSON(data []byte) error {
@@ -167,7 +172,8 @@ func (req *InitializeSignTransactionRequest) UnmarshalJSON(data []byte) error {
 		Subject       string `json:"-"`
 		UserID        string `json:"user_id"`
 		TransactionID string `json:"transaction_id"`
-		Transaction   []byte `json:"transaction_data"`
+		Transaction   []byte `json:"transaction"`
+		Versioned     bool   `json:"versioned"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -183,6 +189,7 @@ func (req *InitializeSignTransactionRequest) UnmarshalJSON(data []byte) error {
 	}
 
 	req.Transaction = transaction
+	req.Versioned = raw.Versioned
 
 	return nil
 }
@@ -209,8 +216,9 @@ func InitializeSignTransactionEndpoint(svc Service) endpoint.Endpoint {
 }
 
 type FinalizeSignTransactionResponse struct {
-	Token       string
 	Transaction *solana.Transaction
+	Versioned   bool
+	Signatures  []solana.Signature
 }
 
 func (resp *FinalizeSignTransactionResponse) MarshalJSON() ([]byte, error) {
@@ -220,11 +228,13 @@ func (resp *FinalizeSignTransactionResponse) MarshalJSON() ([]byte, error) {
 	}
 
 	out := struct {
-		Token       string `json:"token"`
-		Transaction []byte `json:"tx"`
+		Transaction []byte             `json:"transaction"`
+		Versioned   bool               `json:"versioned"`
+		Signatures  []solana.Signature `json:"signatures"`
 	}{
-		Token:       resp.Token,
 		Transaction: bs,
+		Versioned:   resp.Versioned,
+		Signatures:  resp.Signatures,
 	}
 
 	return json.Marshal(out)
@@ -237,14 +247,15 @@ func FinalizeSignTransactionEndpoint(svc Service) endpoint.Endpoint {
 			return nil, errors.New("invalid type")
 		}
 
-		token, transaction, err := svc.FinalizeSignTransaction(req)
+		transaction, versioned, err := svc.FinalizeSignTransaction(req)
 		if err != nil {
 			return nil, err
 		}
 
 		resp := &FinalizeSignTransactionResponse{
-			Token:       token,
 			Transaction: transaction,
+			Versioned:   versioned,
+			Signatures:  transaction.Signatures,
 		}
 
 		return resp, nil

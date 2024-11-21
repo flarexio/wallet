@@ -1,5 +1,5 @@
 <mat-accordion>
-@for (account of tokenAccounts | async; track account; let i = $index) {
+@for (account of tokenAccounts | async; track account.account; let i = $index) {
   <mat-expansion-panel hideToggle>
     <mat-expansion-panel-header>
       <mat-panel-title>

@@ -108,32 +108,6 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
     this.emit('disconnect');
   }
 
-  async signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T> {
-    try {
-      const wallet = this._wallet;
-      if (wallet == null) {
-        throw new WalletNotConnectedError();
-      }
-
-      if (transaction instanceof Transaction) {
-        throw new WalletSignTransactionError("legacy transaction is not supported");
-      }
-
-      try {
-        let tx = transaction as VersionedTransaction;
-        tx = await wallet.signTransaction(tx);
-        return tx as T;
-
-      } catch (err: any) {
-        throw new WalletSignTransactionError(err as string);
-      }
-
-    } catch (err: any) {
-      this.emit('error', err);
-      throw err;
-    }
-  }
-
   async signMessage(message: Uint8Array): Promise<Uint8Array> {
     try {
       const wallet = this._wallet;
@@ -146,6 +120,26 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
         return sig;
       } catch (err: any) {
         throw new WalletSignMessageError(err as string);
+      }
+
+    } catch (err: any) {
+      this.emit('error', err);
+      throw err;
+    }
+  }
+
+  async signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T> {
+    try {
+      const wallet = this._wallet;
+      if (wallet == null) {
+        throw new WalletNotConnectedError();
+      }
+
+      try {
+        const tx = await wallet.signTransaction(transaction);
+        return tx;
+      } catch (err: any) {
+        throw new WalletSignTransactionError(err as string);
       }
 
     } catch (err: any) {

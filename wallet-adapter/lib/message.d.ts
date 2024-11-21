@@ -3,12 +3,13 @@ export declare enum WalletMessageType {
     SIGN_TRANSACTION = "SIGN_TRANSACTION",
     SIGN_MESSAGE = "SIGN_MESSAGE"
 }
+export type WalletMessagePayload = TrustSitePayload | SignMessagePayload | SignTransactionPayload;
 export declare class WalletMessage {
     id: string;
     type: WalletMessageType;
     origin: string;
-    payload: TrustSitePayload | SignTransactionPayload | SignMessagePayload;
-    constructor(id: string, type: WalletMessageType, origin: string, payload: TrustSitePayload | SignTransactionPayload | SignMessagePayload);
+    payload: WalletMessagePayload;
+    constructor(id: string, type: WalletMessageType, origin: string, payload: WalletMessagePayload);
     serialize(): string;
     static deserialize(message: string): WalletMessage;
 }
@@ -22,27 +23,28 @@ export declare class TrustSitePayload {
     serialize(): string;
     static deserialize(payload: string): TrustSitePayload;
 }
-export declare class SignTransactionPayload {
-    tx: Uint8Array;
-    sigs?: Uint8Array[];
-    constructor(tx: Uint8Array, sigs?: Uint8Array[]);
-    serialize(): string;
-    static deserialize(payload: string): SignTransactionPayload;
-}
 export declare class SignMessagePayload {
-    msg: Uint8Array;
-    sig?: Uint8Array;
-    constructor(msg: Uint8Array, sig?: Uint8Array);
+    message: Uint8Array;
+    signature?: Uint8Array;
+    constructor(message: Uint8Array, signature?: Uint8Array);
     serialize(): string;
     static deserialize(payload: string): SignMessagePayload;
+}
+export declare class SignTransactionPayload {
+    transaction: Uint8Array;
+    versioned: boolean;
+    signatures?: Uint8Array[];
+    constructor(transaction: Uint8Array, versioned: boolean, signatures?: Uint8Array[]);
+    serialize(): string;
+    static deserialize(payload: string): SignTransactionPayload;
 }
 export declare class WalletMessageResponse {
     id: string;
     type: WalletMessageType;
     success: boolean;
+    payload?: WalletMessagePayload;
     error?: string;
-    payload?: TrustSitePayload | SignTransactionPayload | SignMessagePayload;
-    constructor(id: string, type: WalletMessageType, success: boolean, error?: string, payload?: TrustSitePayload | SignTransactionPayload | SignMessagePayload);
+    constructor(id: string, type: WalletMessageType, success: boolean, payload?: WalletMessagePayload, error?: string);
     serialize(): string;
     static deserialize(message: string): WalletMessageResponse;
 }

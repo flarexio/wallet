@@ -6,7 +6,7 @@ import {
 
 import { 
   AccountInfo, Connection, PublicKey, Version, 
-  TransactionInstruction, TransactionMessage, VersionedTransaction, 
+  Transaction as LegacyTransaction, TransactionInstruction, TransactionMessage, VersionedTransaction, 
   TransactionConfirmationStrategy, TransactionSignature, SignatureResult, RpcResponseAndContext, 
   clusterApiUrl, 
   LAMPORTS_PER_SOL, 
@@ -158,7 +158,14 @@ export class SolanaService {
   }
 
   sendTransaction(tx: Transaction): Observable<string> {
-    return from(this.connection.sendTransaction(tx.transaction, tx.options));
+    let observable: Observable<string>;
+    if (tx.transaction instanceof VersionedTransaction) {
+      observable = from(this.connection.sendTransaction(tx.transaction, tx.options));
+    } else {
+      observable = from(this.connection.sendTransaction(tx.transaction, [], tx.options));
+    }
+
+    return observable;
   }
 
   confirmTransaction(transaction: TransactionConfirmationStrategy | TransactionSignature): Observable<{}> {
@@ -201,7 +208,7 @@ export class SolanaService {
 }
 
 export interface Transaction {
-  transaction: VersionedTransaction;
+  transaction: VersionedTransaction | LegacyTransaction;
   options: SendTransactionOptions;
 }
 

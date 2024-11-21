@@ -1,4 +1,4 @@
-import { PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 export declare class FlarexWallet {
     private origin;
     private messageCallbacks;
@@ -8,6 +8,6 @@ export declare class FlarexWallet {
     private messageHandler;
     openWindow(): void;
     getPublicKey(): Promise<PublicKey>;
-    signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
     signMessage(message: Uint8Array): Promise<Uint8Array>;
+    signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T>;
 }

@@ -71,6 +71,36 @@
       <router-outlet></router-outlet>
     </mat-card-content>
   </mat-card>
+
+  <button mat-fab class="fab-bottom-right" 
+          [matMenuTriggerFor]="boltMenu">
+    <mat-icon>bolt</mat-icon>
+  </button>
+  <mat-menu #boltMenu="matMenu">
+@switch (currentUrl) {
+  @case ('/sign-message') {
+    <button mat-menu-item (click)="switchRouter('/')">
+      <mat-icon>home</mat-icon>
+      Home
+    </button>
+  }
+
+  @default {
+    <button mat-menu-item (click)="switchRouter('/sign-message')">
+      <mat-icon fontSet="material-symbols-outlined">
+        signature
+      </mat-icon>
+      Signature
+    </button>
+    <button mat-menu-item (click)="refreshTokens()">
+      <mat-icon>
+        refresh
+      </mat-icon>
+      Refresh
+    </button>
+  }
+}
+  </mat-menu>
 </mat-drawer-container>
 
 @if (lastSigninMethod != 'passkeys') {

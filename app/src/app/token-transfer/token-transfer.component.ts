@@ -1,5 +1,6 @@
 import { AsyncPipe } from '@angular/common';
 import { Component } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { 
   FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, 
   AbstractControl, ValidationErrors, ValidatorFn, Validators, 
@@ -12,7 +13,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 
-import { PublicKey, TransactionInstruction } from '@solana/web3.js';
+import { PublicKey, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
 import { 
   createAssociatedTokenAccountInstruction, 
   getAccount, getAssociatedTokenAddressSync, 
@@ -40,6 +41,7 @@ import { NumberFormatPipe } from '../shared/number-format.pipe';
     MatInputModule,
     MatSnackBarModule,
   ],
+  exportAs: 'tokenTransfer',
   templateUrl: './token-transfer.component.html',
   styleUrl: './token-transfer.component.scss'
 })
@@ -51,11 +53,11 @@ export class TokenTransferComponent {
   constructor(
     private formBuilder: FormBuilder,
     private snackBar: MatSnackBar,
-    private identityService: IdentityService,
     private solanaService: SolanaService,
     private walletService: WalletService,
   ) {
     this.tokenAccounts = this.walletService.walletChange.pipe(
+      takeUntilDestroyed(),
       concatMap((pubkey) => this.solanaService.getTokenAccountsByOwner(pubkey).pipe(
         map((accounts) => {
           this.forms = accounts.map((account) => this.formBuilder.group({
@@ -192,7 +194,10 @@ export class TokenTransferComponent {
       transactionInstructions, 
     ).pipe(
       concatMap((tx) => this.walletService.signTransaction(tid, tx.transaction).pipe(
-        map((resp) => { tx.transaction = resp.tx; return tx; }),
+        map((resp) => { 
+          tx.transaction = resp.transaction as VersionedTransaction;
+          return tx; 
+        }),
       )),
       concatMap((tx) => this.solanaService.sendTransaction(tx)),
     ).subscribe({
@@ -201,13 +206,17 @@ export class TokenTransferComponent {
           data: {
             signature,
             network: this.network,
-            action: () => this.identityService.refreshUser(),
+            action: () => this.refreshTokens(),
           }
         })
       },
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     });
+  }
+
+  refreshTokens() {
+    this.walletService.refreshWallet();
   }
 
   public get network(): WalletAdapterNetwork {

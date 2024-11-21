@@ -3,6 +3,7 @@ package wallet
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"sync"
 	"time"
@@ -23,11 +24,11 @@ type Service interface {
 
 	SignMessage(subject string, message []byte) (solana.Signature, error)
 	InitializeSignMessage(req *InitializeSignMessageRequest) (*protocol.CredentialAssertion, string, error)
-	FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (string, solana.Signature, error)
+	FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (solana.Signature, error)
 
 	SignTransaction(subject string, transaction *solana.Transaction) ([]solana.Signature, error)
 	InitializeSignTransaction(req *InitializeSignTransactionRequest) (*protocol.CredentialAssertion, string, error)
-	FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error)
+	FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error)
 
 	CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error)
 	SessionData(ctx context.Context, session string) ([]byte, error)
@@ -118,7 +119,7 @@ func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*p
 	r := &passkeys.InitializeTransactionRequest{
 		UserID:          req.UserID,
 		TransactionID:   req.TransactionID,
-		TransactionData: req.TransactionData,
+		TransactionData: sha256.Sum256(req.Message),
 	}
 
 	opts, mediation, err := svc.passkeys.InitializeTransaction(r)
@@ -126,17 +127,17 @@ func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*p
 		return nil, "", err
 	}
 
-	sig, err := svc.SignMessage(req.Subject, req.TransactionData)
+	sig, err := svc.SignMessage(req.Subject, req.Message)
 	if err != nil {
 		return nil, "", err
 	}
 
-	t, err := account.NewSignMessageTransaction(req.TransactionID, req.TransactionData)
+	t, err := account.NewSignMessageTransaction(req.TransactionID, req.Message)
 	if err != nil {
 		return nil, "", err
 	}
 
-	t.Signature = sig
+	t.Message.Signature = sig
 
 	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
 		return nil, "", err
@@ -145,42 +146,42 @@ func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*p
 	return opts, mediation, nil
 }
 
-func (svc *service) FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (string, solana.Signature, error) {
+func (svc *service) FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (solana.Signature, error) {
 	var sig solana.Signature
 
 	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
 	if err != nil {
-		return "", sig, err
+		return sig, err
 	}
 
 	token, err := svc.passkeys.VerifyToken(tokenStr)
 	if err != nil {
-		return "", sig, err
+		return sig, err
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", sig, errors.New("invalid type")
+		return sig, errors.New("invalid type")
 	}
 
 	tid, ok := claims["trans"].(string)
 	if !ok {
-		return "", sig, errors.New("invalid type")
+		return sig, errors.New("invalid type")
 	}
 
 	id, err := account.ParseTransactionID(tid)
 	if err != nil {
-		return "", sig, err
+		return sig, err
 	}
 
 	t, err := svc.accounts.RemoveTransactionByID(id)
 	if err != nil {
-		return "", sig, err
+		return sig, err
 	}
 
-	sig = t.Signature
+	sig = t.Message.Signature
 
-	return tokenStr, sig, nil
+	return sig, nil
 }
 
 func (svc *service) SignTransaction(subject string, transaction *solana.Transaction) ([]solana.Signature, error) {
@@ -210,7 +211,7 @@ func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequ
 	r := &passkeys.InitializeTransactionRequest{
 		UserID:          req.UserID,
 		TransactionID:   req.TransactionID,
-		TransactionData: data,
+		TransactionData: sha256.Sum256(data),
 	}
 
 	opts, mediation, err := svc.passkeys.InitializeTransaction(r)
@@ -223,12 +224,12 @@ func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequ
 		return nil, "", err
 	}
 
-	t, err := account.NewSignTransaction(req.TransactionID, req.Transaction)
+	t, err := account.NewSignTransaction(req.TransactionID, req.Transaction, req.Versioned)
 	if err != nil {
 		return nil, "", err
 	}
 
-	t.Signature = sigs[0]
+	t.Transaction.Signatures = sigs
 
 	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
 		return nil, "", err
@@ -237,38 +238,41 @@ func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequ
 	return opts, mediation, nil
 }
 
-func (svc *service) FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (string, *solana.Transaction, error) {
+func (svc *service) FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error) {
 	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
 	if err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 
 	token, err := svc.passkeys.VerifyToken(tokenStr)
 	if err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", nil, errors.New("invalid type")
+		return nil, false, errors.New("invalid type")
 	}
 
 	tid, ok := claims["trans"].(string)
 	if !ok {
-		return "", nil, errors.New("invalid type")
+		return nil, false, errors.New("invalid type")
 	}
 
 	id, err := account.ParseTransactionID(tid)
 	if err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 
 	t, err := svc.accounts.RemoveTransactionByID(id)
 	if err != nil {
-		return "", nil, err
+		return nil, false, err
 	}
 
-	return tokenStr, t.Transaction, nil
+	tx := t.Transaction.Transaction
+	versioned := t.Transaction.Versioned
+
+	return tx, versioned, nil
 }
 
 func (svc *service) CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error) {

@@ -13,7 +13,7 @@
 
   @if (msg != undefined) {
     <mat-button-toggle-group name="display" hideSingleSelectionIndicator 
-                             (valueChange)="onDisplayChange($event)">
+                             (valueChange)="displayChangeHandler($event)">
       <mat-button-toggle value="text">Text</mat-button-toggle>
       <mat-button-toggle value="json">JSON</mat-button-toggle>
       <mat-button-toggle value="hex">Hex</mat-button-toggle>

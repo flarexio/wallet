@@ -56,16 +56,18 @@ func (a *Account) Sign(data []byte) []byte {
 	return ed25519.Sign(a.PrivateKey, data)
 }
 
-func NewSignTransaction(id string, tx *solana.Transaction) (*Transaction, error) {
+func NewSignTransaction(id string, tx *solana.Transaction, versioned bool) (*Transaction, error) {
 	tid, err := ParseTransactionID(id)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Transaction{
-		TransactionID:   tid,
-		TransactionType: SignTransaction,
-		Transaction:     tx,
+		TransactionID: tid,
+		Transaction: &SignTransaction{
+			Transaction: tx,
+			Versioned:   versioned,
+		},
 	}, nil
 }
 
@@ -76,9 +78,10 @@ func NewSignMessageTransaction(id string, msg []byte) (*Transaction, error) {
 	}
 
 	return &Transaction{
-		TransactionID:   tid,
-		TransactionType: SignMessage,
-		Message:         msg,
+		TransactionID: tid,
+		Message: &SignMessage{
+			Message: msg,
+		},
 	}, nil
 }
 
@@ -97,86 +100,79 @@ func (id TransactionID) String() string {
 	return uuid.UUID(id).String()
 }
 
-type TransactionType string
-
-const (
-	SignTransaction TransactionType = "sign_transaction"
-	SignMessage     TransactionType = "sign_message"
-)
-
-type Transaction struct {
-	TransactionID   TransactionID
-	TransactionType TransactionType
-	Transaction     *solana.Transaction
-	Message         []byte
-	Signature       solana.Signature
+func (id TransactionID) MarshalJSON() ([]byte, error) {
+	jsonStr := `"` + id.String() + `"`
+	return json.Marshal(jsonStr)
 }
 
-func (tx *Transaction) UnmarshalJSON(data []byte) error {
+func (id *TransactionID) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	tid, err := ParseTransactionID(s)
+	if err != nil {
+		return err
+	}
+
+	*id = tid
+	return nil
+}
+
+type Transaction struct {
+	TransactionID TransactionID    `json:"transaction_id"`
+	Transaction   *SignTransaction `json:"transaction"`
+	Message       *SignMessage     `json:"message"`
+}
+
+type SignMessage struct {
+	Message   []byte
+	Signature solana.Signature
+}
+
+type SignTransaction struct {
+	Transaction *solana.Transaction
+	Versioned   bool
+	Signatures  []solana.Signature
+}
+
+func (tx *SignTransaction) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		TransactionID   string           `json:"transaction_id"`
-		TransactionType TransactionType  `json:"transaction_type"`
-		Transaction     []byte           `json:"transaction"`
-		Message         []byte           `json:"message"`
-		Signature       solana.Signature `json:"signature"`
+		Transaction []byte             `json:"transaction"`
+		Versioned   bool               `json:"versioned"`
+		Signatures  []solana.Signature `json:"signatures"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	id, err := ParseTransactionID(raw.TransactionID)
+	transaction, err := solana.TransactionFromBytes(raw.Transaction)
 	if err != nil {
 		return err
 	}
 
-	tx.TransactionID = id
-	tx.TransactionType = raw.TransactionType
-
-	switch raw.TransactionType {
-	case SignTransaction:
-		transaction, err := solana.TransactionFromBytes(raw.Transaction)
-		if err != nil {
-			return err
-		}
-
-		tx.Transaction = transaction
-		tx.Signature = raw.Signature
-
-	case SignMessage:
-		tx.Message = raw.Message
-		tx.Signature = raw.Signature
-	}
+	tx.Transaction = transaction
+	tx.Versioned = raw.Versioned
+	tx.Signatures = raw.Signatures
 
 	return nil
 }
 
-func (tx *Transaction) MarshalJSON() ([]byte, error) {
-	out := struct {
-		TransactionID   string           `json:"transaction_id"`
-		TransactionType TransactionType  `json:"transaction_type"`
-		Transaction     []byte           `json:"transaction"`
-		Message         []byte           `json:"message"`
-		Signature       solana.Signature `json:"signature"`
+func (tx *SignTransaction) MarshalJSON() ([]byte, error) {
+	bs, err := tx.Transaction.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(struct {
+		Transaction []byte             `json:"transaction"`
+		Versioned   bool               `json:"versioned"`
+		Signatures  []solana.Signature `json:"signatures"`
 	}{
-		TransactionID:   tx.TransactionID.String(),
-		TransactionType: tx.TransactionType,
-	}
-
-	switch tx.TransactionType {
-	case SignTransaction:
-		bs, err := tx.Transaction.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-
-		out.Transaction = bs
-		out.Signature = tx.Signature
-
-	case SignMessage:
-		out.Message = tx.Message
-		out.Signature = tx.Signature
-	}
-
-	return json.Marshal(&out)
+		Transaction: bs,
+		Versioned:   tx.Versioned,
+		Signatures:  tx.Signatures,
+	})
 }

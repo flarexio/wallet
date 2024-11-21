@@ -1,13 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, catchError, concatMap, map, of, share } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, concatMap, map, of, share } from 'rxjs';
 
 import { 
   WalletMessage, WalletMessageType, WalletMessageResponse,
   TrustSitePayload, SignTransactionPayload, SignMessagePayload,
 } from '@flarex/wallet-adapter';
 import { CredentialRequestOptionsJSON, get } from "@github/webauthn-json";
-import { PublicKey, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import * as base58 from 'bs58';
 
 import { environment as env } from '../environments/environment';
@@ -22,16 +22,26 @@ export class WalletService {
   private _responseCallback: ((resp: WalletMessageResponse) => void) | undefined;
   private _currentWallet: PublicKey | null = null;
 
-  walletChange: Observable<PublicKey | null>;
+  private _walletSubject = new BehaviorSubject<PublicKey | null>(null);
+
+  walletChange = this._walletSubject.asObservable();
 
   constructor(
     private http: HttpClient,
     private identity: IdentityService,
   ) {
-    this.walletChange = this.identity.userChange.pipe(
+    this.identity.userChange.pipe(
       concatMap((user) => this.wallet(user)),
-      share(),
-    );
+    ).subscribe({
+      next: (wallet) => this._currentWallet = wallet,
+      error: (err) => console.error(err),
+      complete: () => console.log('complete'),
+    });
+  }
+
+  refreshWallet() {
+    const wallet = this._currentWallet;
+    this._walletSubject.next(wallet);
   }
 
   wallet(user: User | undefined): Observable<PublicKey | null> {
@@ -101,26 +111,53 @@ export class WalletService {
           msg.id,
           msg.type,
           true,
-          undefined,
           trustSitePayload,
         ));
 
+      case WalletMessageType.SIGN_MESSAGE:
+        const signMsgPayload = msg.payload as SignMessagePayload;
+        const message = signMsgPayload.message;
+
+        return this.signMessage(msg.id, message).pipe(
+          map((result) => {
+            const signature = base58.decode(result.signature);
+
+            return new WalletMessageResponse(
+              msg.id,
+              msg.type,
+              true,
+              new SignMessagePayload(message, signature),
+            );
+          }),
+          catchError((err) => {
+            return of(new WalletMessageResponse(
+              msg.id,
+              msg.type,
+              false,
+              undefined,
+              err.message,
+            ));
+          }),
+        );
+
       case WalletMessageType.SIGN_TRANSACTION:
         const signTxPayload = msg.payload as SignTransactionPayload;
-        const bytes = Buffer.from(signTxPayload.tx);
+        const bytes = Buffer.from(signTxPayload.transaction);
         const tx = VersionedTransaction.deserialize(bytes);
 
         return this.signTransaction(msg.id, tx).pipe(
           map((result) => {
-            const bytes = result.tx.serialize();
-            const sigs = result.tx.signatures;
+            const bytes = result.transaction.serialize();
+            const versioned = result.versioned;
+            const signatures = result.signatures.map(
+              (sig) => base58.decode(sig),
+            );
 
             return new WalletMessageResponse(
               msg.id,
               msg.type,
               true,
-              undefined,
-              new SignTransactionPayload(bytes, sigs),
+              new SignTransactionPayload(bytes, versioned, signatures),
             );
           }),
           catchError((err) => {
@@ -128,80 +165,12 @@ export class WalletService {
               msg.id,
               msg.type,
               false,
+              undefined,
               err.message,
-              undefined,
-            ));
-          }),
-        );
-
-      case WalletMessageType.SIGN_MESSAGE:
-        const signMsgPayload = msg.payload as SignMessagePayload;
-
-        return this.signMessage(msg.id, signMsgPayload.msg).pipe(
-          map((result) => {
-            const sig = base58.decode(result.sig);
-
-            return new WalletMessageResponse(
-              msg.id,
-              msg.type,
-              true,
-              undefined,
-              new SignMessagePayload(signMsgPayload.msg, sig),
-            );
-          }),
-          catchError((err) => {
-            return of(new WalletMessageResponse(
-              msg.id,
-              msg.type,
-              false,
-              err.message,
-              undefined,
             ));
           }),
         );
     }
-  }
-
-  signTransaction(tid: string, tx: VersionedTransaction): Observable<SignTransactionResponse> {
-    if (this.identity.currentUser == undefined) {
-      throw new Error('user not found');
-    }
-
-    const user = this.identity.currentUser.username;
-
-    if (this.identity.currentToken == undefined) {
-      throw new Error('token not found');
-    }
-
-    const token = this.identity.currentToken.token;
-    const headers = { Authorization: `Bearer ${token}` };
-
-    const user_id = this.identity.currentPasskeyUserID;
-    if (user_id == undefined) {
-      throw new Error('login without using a passkey')
-    }
-
-    const base64 = Buffer
-      .from(tx.serialize())
-      .toString('base64');
-
-    const body = {
-      user_id, 
-      transaction_id: tid,
-      transaction_data: base64,
-    };
-
-    return this.http.post(`${this.baseURL}/accounts/${user}/transaction-signatures`, body, { headers },).pipe(
-      concatMap((opts) => get(opts as CredentialRequestOptionsJSON)),
-      concatMap((credential) => this.http.put(`${this.baseURL}/accounts/${user}/transaction-signatures`, credential, { headers })),
-      map((raw: any) => {
-        const token = raw.token as string;
-        const bytes = Buffer.from(raw.tx, 'base64');
-        const vtx = VersionedTransaction.deserialize(bytes);
-
-        return { token, tx: vtx };
-      }),
-    );
   }
 
   signMessage(tid: string, msg: Uint8Array): Observable<SignMessageResponse> {
@@ -223,24 +192,75 @@ export class WalletService {
       throw new Error('login without using a passkey')
     }
 
-    const base64 = Buffer
+    const based = Buffer
       .from(msg)
       .toString('base64');
 
     const body = {
       user_id, 
       transaction_id: tid,
-      transaction_data: base64,
+      message: based,
     };
 
     return this.http.post(`${this.baseURL}/accounts/${user}/message-signatures`, body, { headers },).pipe(
       concatMap((opts) => get(opts as CredentialRequestOptionsJSON)),
       concatMap((credential) => this.http.put(`${this.baseURL}/accounts/${user}/message-signatures`, credential, { headers })),
-      map((raw: any) => {
-        const token = raw.token as string;
-        const sig = raw.sig as string;
+      map((resp: any) => {
+        const sig = resp.signature as string;
 
-        return { token, msg, sig };
+        return { message: msg, signature: sig };
+      }),
+    );
+  }
+
+  signTransaction(tid: string, tx: Transaction | VersionedTransaction): Observable<SignTransactionResponse> {
+    if (this.identity.currentUser == undefined) {
+      throw new Error('user not found');
+    }
+
+    const user = this.identity.currentUser.username;
+
+    if (this.identity.currentToken == undefined) {
+      throw new Error('token not found');
+    }
+
+    const token = this.identity.currentToken.token;
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const user_id = this.identity.currentPasskeyUserID;
+    if (user_id == undefined) {
+      throw new Error('login without using a passkey')
+    }
+
+    const versioned = tx instanceof VersionedTransaction;
+
+    const based = Buffer
+      .from(tx.serialize())
+      .toString('base64');
+
+    const body = {
+      user_id, 
+      transaction_id: tid,
+      transaction: based,
+      versioned,
+    };
+
+    return this.http.post(`${this.baseURL}/accounts/${user}/transaction-signatures`, body, { headers },).pipe(
+      concatMap((opts) => get(opts as CredentialRequestOptionsJSON)),
+      concatMap((credential) => this.http.put(`${this.baseURL}/accounts/${user}/transaction-signatures`, credential, { headers })),
+      map((resp: any) => {
+        const bytes = Buffer.from(resp.transaction, 'base64');
+        const versioned = resp.versioned as boolean;
+        const signatures = resp.signatures as string[];
+
+        let transaction: Transaction | VersionedTransaction;
+        if (versioned) {
+          transaction = VersionedTransaction.deserialize(bytes);
+        } else {
+          transaction = Transaction.from(bytes);
+        }
+
+        return { transaction, versioned, signatures };
       }),
     );
   }
@@ -264,16 +284,18 @@ export class WalletService {
   }
   public set currentWallet(wallet: PublicKey | null) {
     this._currentWallet = wallet;
+
+    this._walletSubject.next(wallet);
   }
 }
 
 export interface SignMessageResponse {
-  token: string;
-  msg: Uint8Array;
-  sig: string;
+  message: Uint8Array;
+  signature: string;
 }
 
 export interface SignTransactionResponse {
-  token: string;
-  tx: VersionedTransaction;
+  transaction: Transaction | VersionedTransaction;
+  versioned: boolean;
+  signatures: string[];
 }

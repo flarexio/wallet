@@ -18,8 +18,8 @@ export declare class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter 
     autoConnect(): Promise<void>;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
-    signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T>;
     signMessage(message: Uint8Array): Promise<Uint8Array>;
+    signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T>;
     get wallet(): FlarexWallet | null;
     get connecting(): boolean;
     get publicKey(): PublicKey | null;

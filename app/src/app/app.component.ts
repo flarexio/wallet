@@ -1,6 +1,6 @@
 import { AsyncPipe, CurrencyPipe, SlicePipe } from '@angular/common';
-import { Component, ChangeDetectorRef, HostListener, OnInit } from '@angular/core';
-import { RouterOutlet, Router } from '@angular/router';
+import { Component, ChangeDetectorRef, HostListener, OnInit, ViewChild } from '@angular/core';
+import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { Observable, catchError, concatMap, filter, forkJoin, interval, map, of, switchMap, take } from 'rxjs';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -14,13 +14,14 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { WalletMessage, WalletMessageType, WalletMessageResponse } from '@flarex/wallet-adapter';
+import { WalletMessage, WalletMessageType } from '@flarex/wallet-adapter';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User, SigninResult } from './identity.service';
 import { SolanaService, AssociatedTokenAccount } from './solana.service';
 import { WalletService } from './wallet.service';
+import { TokenTransferComponent } from './token-transfer/token-transfer.component';
 
 declare var google: any;
 
@@ -53,6 +54,11 @@ export class AppComponent implements OnInit {
   account: Observable<{ account: string, balance: number }> = of({ account: '', balance: 0 });
   tokenAccounts: Observable<AssociatedTokenAccount[]> = of([]);
 
+  @ViewChild(RouterOutlet)
+  outlet: RouterOutlet | undefined;
+
+  currentUrl: string = '';
+
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
@@ -67,6 +73,14 @@ export class AppComponent implements OnInit {
         balance: this.solanaService.getBalance(pubkey),
       })),
     );
+
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+    ).subscribe({
+      next: (event) => this.currentUrl = event.url,
+      error: (err) => console.error(err),
+      complete: () => console.log('complete'),
+    });
 
     this.lastSigninMethod = localStorage.getItem('last-signin-method');
 
@@ -278,6 +292,19 @@ export class AppComponent implements OnInit {
 
   browseAccount(account: string, network: WalletAdapterNetwork) {
     window.open(`https://explorer.solana.com/address/${account}?cluster=${network}`, '_blank');
+  }
+
+  switchRouter(url: string) {
+    this.router.navigateByUrl(url);
+  }
+
+  refreshTokens() {
+    const outlet = this.outlet;
+    if (outlet == undefined) return;
+
+    if (outlet.component instanceof TokenTransferComponent) {
+      outlet.component.refreshTokens();
+    }
   }
 
   public get network(): WalletAdapterNetwork {

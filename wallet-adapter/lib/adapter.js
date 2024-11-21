@@ -101,31 +101,6 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
             this.emit('disconnect');
         });
     }
-    signTransaction(transaction) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const wallet = this._wallet;
-                if (wallet == null) {
-                    throw new wallet_adapter_base_1.WalletNotConnectedError();
-                }
-                if (transaction instanceof web3_js_1.Transaction) {
-                    throw new wallet_adapter_base_1.WalletSignTransactionError("legacy transaction is not supported");
-                }
-                try {
-                    let tx = transaction;
-                    tx = yield wallet.signTransaction(tx);
-                    return tx;
-                }
-                catch (err) {
-                    throw new wallet_adapter_base_1.WalletSignTransactionError(err);
-                }
-            }
-            catch (err) {
-                this.emit('error', err);
-                throw err;
-            }
-        });
-    }
     signMessage(message) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -139,6 +114,27 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
                 }
                 catch (err) {
                     throw new wallet_adapter_base_1.WalletSignMessageError(err);
+                }
+            }
+            catch (err) {
+                this.emit('error', err);
+                throw err;
+            }
+        });
+    }
+    signTransaction(transaction) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const wallet = this._wallet;
+                if (wallet == null) {
+                    throw new wallet_adapter_base_1.WalletNotConnectedError();
+                }
+                try {
+                    const tx = yield wallet.signTransaction(transaction);
+                    return tx;
+                }
+                catch (err) {
+                    throw new wallet_adapter_base_1.WalletSignTransactionError(err);
                 }
             }
             catch (err) {

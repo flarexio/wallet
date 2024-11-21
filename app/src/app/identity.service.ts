@@ -125,13 +125,6 @@ export class IdentityService {
     this.currentPasskeyUserID = undefined;
   }
 
-  refreshUser() {
-    const user = this.currentUser;
-    if (user == undefined) return;
-
-    this._userChangeSubject.next(user);
-  }
-
   public get currentUser(): User | undefined {
     return this._currentUser;
   }

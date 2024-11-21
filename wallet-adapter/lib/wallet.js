@@ -72,27 +72,6 @@ class FlarexWallet {
             this.todo = msg;
         });
     }
-    signTransaction(tx) {
-        return new Promise((resolve, reject) => {
-            if (this.todo != null) {
-                reject(new Error('wallet is busy'));
-                return;
-            }
-            this.openWindow();
-            // sign transaction
-            const msg = new message_1.WalletMessage((0, uuid_1.v4)(), message_1.WalletMessageType.SIGN_TRANSACTION, window.location.origin, new message_1.SignTransactionPayload(tx.serialize()));
-            this.messageCallbacks.set(msg.id, (resp) => {
-                if (!resp.success) {
-                    reject(new Error(resp.error));
-                    return;
-                }
-                const payload = resp.payload;
-                const tx = web3_js_1.VersionedTransaction.deserialize(payload.tx);
-                resolve(tx);
-            });
-            this.todo = msg;
-        });
-    }
     signMessage(message) {
         return new Promise((resolve, reject) => {
             if (this.todo != null) {
@@ -108,12 +87,36 @@ class FlarexWallet {
                     return;
                 }
                 const payload = resp.payload;
-                const sig = payload.sig;
+                const sig = payload.signature;
                 if (sig == undefined) {
                     reject(new Error('no sig'));
                     return;
                 }
                 resolve(sig);
+            });
+            this.todo = msg;
+        });
+    }
+    signTransaction(tx) {
+        return new Promise((resolve, reject) => {
+            if (this.todo != null) {
+                reject(new Error('wallet is busy'));
+                return;
+            }
+            this.openWindow();
+            // sign transaction
+            const versioned = tx instanceof web3_js_1.VersionedTransaction;
+            const msg = new message_1.WalletMessage((0, uuid_1.v4)(), message_1.WalletMessageType.SIGN_TRANSACTION, window.location.origin, new message_1.SignTransactionPayload(tx.serialize(), versioned));
+            this.messageCallbacks.set(msg.id, (resp) => {
+                if (!resp.success) {
+                    reject(new Error(resp.error));
+                    return;
+                }
+                const payload = resp.payload;
+                const tx = versioned ?
+                    web3_js_1.VersionedTransaction.deserialize(payload.transaction) :
+                    web3_js_1.Transaction.from(payload.transaction);
+                resolve(tx);
             });
             this.todo = msg;
         });
