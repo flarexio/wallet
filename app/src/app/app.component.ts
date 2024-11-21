@@ -174,9 +174,6 @@ export class AppComponent implements OnInit {
         });
         break;
 
-      case WalletMessageType.SIGN_TRANSACTION:
-        break;
-
       default:
         this.walletService.messageHandler(msg)?.subscribe({
           next: (resp) => this.walletService.sendResponse(resp),

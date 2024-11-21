@@ -22,7 +22,7 @@
     "@angular/router": "^18.0.0",
     "@angular/service-worker": "^18.0.0",
     "@bonfida/spl-name-service": "^3.0.6",
-    "@flarex/wallet-adapter": "^1.0.12",
+    "@flarex/wallet-adapter": "^1.0.13",
     "@github/webauthn-json": "^2.1.1",
     "@solana/spl-token": "^0.4.9",
     "@solana/wallet-adapter-base": "^0.9.23",

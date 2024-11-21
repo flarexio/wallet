@@ -105,8 +105,28 @@ class FlarexWallet {
             }
             this.openWindow();
             // sign transaction
+            let vtx;
             const versioned = tx instanceof web3_js_1.VersionedTransaction;
-            const msg = new message_1.WalletMessage((0, uuid_1.v4)(), message_1.WalletMessageType.SIGN_TRANSACTION, window.location.origin, new message_1.SignTransactionPayload(tx.serialize(), versioned));
+            if (versioned) {
+                vtx = tx;
+            }
+            else {
+                if (tx.recentBlockhash == undefined) {
+                    reject(new Error('no recent blockhash'));
+                    return;
+                }
+                if (tx.feePayer == undefined) {
+                    reject(new Error('no fee payer'));
+                    return;
+                }
+                const message = new web3_js_1.TransactionMessage({
+                    payerKey: tx.feePayer,
+                    instructions: tx.instructions,
+                    recentBlockhash: tx.recentBlockhash,
+                }).compileToLegacyMessage();
+                vtx = new web3_js_1.VersionedTransaction(message);
+            }
+            const msg = new message_1.WalletMessage((0, uuid_1.v4)(), message_1.WalletMessageType.SIGN_TRANSACTION, window.location.origin, new message_1.SignTransactionPayload(vtx.serialize(), versioned));
             this.messageCallbacks.set(msg.id, (resp) => {
                 if (!resp.success) {
                     reject(new Error(resp.error));

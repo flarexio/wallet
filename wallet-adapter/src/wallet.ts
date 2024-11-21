@@ -1,4 +1,4 @@
-import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { PublicKey, Transaction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { v4 as uuid } from 'uuid';
 
 import { 
@@ -146,13 +146,36 @@ export class FlarexWallet {
       this.openWindow();
 
       // sign transaction
+      let vtx: VersionedTransaction;
+
       const versioned = tx instanceof VersionedTransaction;
+      if (versioned) {
+        vtx = tx;
+      } else {
+        if (tx.recentBlockhash == undefined) {
+          reject(new Error('no recent blockhash'));
+          return;
+        }
+
+        if (tx.feePayer == undefined) {
+          reject(new Error('no fee payer'));
+          return;
+        }
+
+        const message = new TransactionMessage({
+          payerKey: tx.feePayer,
+          instructions: tx.instructions,
+          recentBlockhash: tx.recentBlockhash,
+        }).compileToLegacyMessage();
+
+        vtx = new VersionedTransaction(message);
+      }
 
       const msg = new WalletMessage(
         uuid(),
         WalletMessageType.SIGN_TRANSACTION,
         window.location.origin,
-        new SignTransactionPayload(tx.serialize(), versioned),
+        new SignTransactionPayload(vtx.serialize(), versioned),
       );
 
       this.messageCallbacks.set(msg.id, (resp: WalletMessageResponse) => {
