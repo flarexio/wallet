@@ -6,13 +6,28 @@ import {
   TrustSitePayload, SignTransactionPayload, SignMessagePayload, 
 } from './message';
 
-type MessageCallback = (resp: WalletMessageResponse) => void;
+class PopupBlockedError extends Error {
+  constructor() {
+    super('popup window blocked');
+    this.name = 'PopupBlockedError';
+  }
+}
+
+type ResponseHandler = {
+  resolve: (value: any) => void, 
+  reject: (reason?: any) => void,
+}
+
+type RetryOperation = 'Trust Site' | 'Sign Message' | 'Sign Transaction' | undefined;
 
 export class FlarexWallet {
   private origin = 'https://wallet.flarex.io';
-  private messageCallbacks: Map<string, MessageCallback> = new Map();
+  private handlers: Map<string, ResponseHandler> = new Map();
   private walletWindow: WindowProxy | null = null;
-  private todo: WalletMessage | null = null;
+
+  private pendingMessage: WalletMessage | null = null;
+
+  private _requestRetry: RetryOperation = undefined;
 
   constructor(origin?: string) {
     this.origin = origin ?? 'https://wallet.flarex.io';
@@ -27,19 +42,65 @@ export class FlarexWallet {
 
     // wallet is ready
     if (event.data == 'WALLET_READY') {
-      if (this.todo == null) return;
+      if (this.pendingMessage == null) return;
 
-      this.walletWindow?.postMessage(this.todo, this.origin);
-      this.todo = null;
+      this.walletWindow?.postMessage(this.pendingMessage, this.origin);
+      this.pendingMessage = null;
       return;
     }
 
     // wallet message response
     const resp = event.data as WalletMessageResponse;
-    const callback = this.messageCallbacks.get(resp.id);
-    if (callback != undefined) {
-      callback(resp);
-      this.messageCallbacks.delete(resp.id);
+
+    const handler = this.handlers.get(resp.id);
+    if (handler == undefined) return;
+
+    switch (resp.type) {
+      case WalletMessageType.TRUST_SITE:
+        if (!resp.success) {
+          handler.reject(new Error(resp.error));
+          return;
+        }
+
+        const trustSitePayload = resp.payload as TrustSitePayload;
+        const pubkey = trustSitePayload.pubkey;
+        if (pubkey == undefined) {
+          handler.reject(new Error('no public key'));
+          return;
+        }
+
+        handler.resolve(new PublicKey(pubkey));
+        break;
+
+      case WalletMessageType.SIGN_MESSAGE:
+        if (!resp.success) {
+          handler.reject(new Error(resp.error));
+          return;
+        }
+
+        const signMessagePayload = resp.payload as SignMessagePayload;
+        const sig = signMessagePayload.signature;
+        if (sig == undefined) {
+          handler.reject(new Error('no signature'));
+          return;
+        }
+
+        handler.resolve(sig);
+        break;
+
+      case WalletMessageType.SIGN_TRANSACTION:
+        if (!resp.success) {
+          handler.reject(new Error(resp.error));
+          return;
+        }
+
+        const signTransactionPayload = resp.payload as SignTransactionPayload;
+        const tx = signTransactionPayload.versioned ? 
+          VersionedTransaction.deserialize(signTransactionPayload.transaction) : 
+          Transaction.from(signTransactionPayload.transaction);
+
+        handler.resolve(tx);
+        break;
     }
   }
 
@@ -52,21 +113,49 @@ export class FlarexWallet {
     this.walletWindow = window.open(this.origin, 'wallet', 
       `width=${width},height=${height},top=${top},left=${left}`);
 
+    if (this.walletWindow == null) {
+      throw new PopupBlockedError();
+    }
+
     setInterval(() => {
-      if (this.todo == null) return;
+      if (this.pendingMessage == null) return;
 
       this.walletWindow?.postMessage('IS_READY', this.origin);
     }, 1000);
   }
 
+  retryOperation() {
+    if (this._requestRetry == null) {
+      throw new Error('no pending retry operation');
+    }
+
+    const msg = this.pendingMessage;
+    if (msg == null) {
+      throw new Error('no pending message');
+    }
+
+    const handler = this.handlers.get(msg.id);
+    if (handler == null) {
+      throw new Error('no handler');
+    }
+
+    try {
+      this.openWindow();
+    } catch (err) {
+      this.pendingMessage = null;
+      this.handlers.delete(msg.id);
+      handler.reject(err);
+    } finally {
+      this._requestRetry = undefined;
+    }
+  }
+
   getPublicKey(): Promise<PublicKey> {
     return new Promise((resolve, reject) => {
-      if (this.todo != null) {
+      if (this.pendingMessage != null) {
         reject(new Error('wallet is busy'));
         return;
       }
-
-      this.openWindow();
 
       // trust site
       const msg = new WalletMessage(
@@ -79,34 +168,25 @@ export class FlarexWallet {
         ),
       );
 
-      this.messageCallbacks.set(msg.id, (resp: WalletMessageResponse) => {
-        if (!resp.success) {
-          reject(new Error(resp.error));
-          return;
+      try {
+        this.pendingMessage = msg;
+        this.handlers.set(msg.id, { resolve, reject });
+
+        this.openWindow();
+      } catch (err) {
+        if (err instanceof PopupBlockedError) {
+          this._requestRetry = 'Trust Site';
         }
-
-        const payload = resp.payload as TrustSitePayload;
-        const pubkey = payload.pubkey;
-        if (pubkey == undefined) {
-          reject(new Error('no pubkey'));
-          return;
-        }
-
-        resolve(new PublicKey(pubkey));
-      });
-
-      this.todo = msg;
+      }
     });
   }
 
   signMessage(message: Uint8Array): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
-      if (this.todo != null) {
+      if (this.pendingMessage != null) {
         reject(new Error('wallet is busy'));
         return;
       }
-
-      this.openWindow();
 
       // sign message
       const msg = new WalletMessage(
@@ -116,34 +196,25 @@ export class FlarexWallet {
         new SignMessagePayload(message),
       );
 
-      this.messageCallbacks.set(msg.id, (resp: WalletMessageResponse) => {
-        if (!resp.success) {
-          reject(new Error(resp.error));
-          return;
+      try {
+        this.pendingMessage = msg;
+        this.handlers.set(msg.id, { resolve, reject });
+
+        this.openWindow();
+      } catch (err) {
+        if (err instanceof PopupBlockedError) {
+          this._requestRetry = 'Sign Message';
         }
-
-        const payload = resp.payload as SignMessagePayload;
-        const sig = payload.signature;
-        if (sig == undefined) {
-          reject(new Error('no sig'));
-          return;
-        }
-
-        resolve(sig);
-      });
-
-      this.todo = msg;
+      }
     });
   }
 
   signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
     return new Promise((resolve, reject) => {
-      if (this.todo != null) {
+      if (this.pendingMessage != null) {
         reject(new Error('wallet is busy'));
         return;
       }
-
-      this.openWindow();
 
       // sign transaction
       let vtx: VersionedTransaction;
@@ -178,21 +249,20 @@ export class FlarexWallet {
         new SignTransactionPayload(vtx.serialize(), versioned),
       );
 
-      this.messageCallbacks.set(msg.id, (resp: WalletMessageResponse) => {
-        if (!resp.success) {
-          reject(new Error(resp.error));
-          return;
+      try {
+        this.pendingMessage = msg;
+        this.handlers.set(msg.id, { resolve, reject });
+
+        this.openWindow();
+      } catch (err) {
+        if (err instanceof PopupBlockedError) {
+          this._requestRetry = 'Sign Transaction';
         }
-
-        const payload = resp.payload as SignTransactionPayload;
-        const tx = versioned ? 
-          VersionedTransaction.deserialize(payload.transaction) : 
-          Transaction.from(payload.transaction);
-
-        resolve(tx as T);
-      });
-
-      this.todo = msg;
+      }
     });
+  }
+
+  public get requestRetry(): RetryOperation {
+    return this._requestRetry;
   }
 }

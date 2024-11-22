@@ -30,10 +30,10 @@ class FlarexWalletAdapter extends wallet_adapter_base_1.BaseMessageSignerWalletA
                 this.url = config.url;
             }
         }
+        this._wallet = new wallet_1.FlarexWallet(this.url);
         fetch(`${this.url}/wallet/v1/health`).then(resp => {
             if (resp.status == 200) {
                 this.readyState = wallet_adapter_base_1.WalletReadyState.Installed;
-                this._wallet = new wallet_1.FlarexWallet(this.url);
             }
             else {
                 this.readyState = wallet_adapter_base_1.WalletReadyState.Unsupported;

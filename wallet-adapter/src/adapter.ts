@@ -32,11 +32,11 @@ export class FlarexWalletAdapter extends BaseMessageSignerWalletAdapter {
       }
     }
 
+    this._wallet = new FlarexWallet(this.url);
+
     fetch(`${this.url}/wallet/v1/health`).then(resp => {
       if (resp.status == 200) {
         this.readyState = WalletReadyState.Installed;
-
-        this._wallet = new FlarexWallet(this.url);
       } else {
         this.readyState = WalletReadyState.Unsupported;
       }
