@@ -17,3 +17,8 @@
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+
+.display-selector {
+  display: flex;
+  justify-content: flex-end;
+}

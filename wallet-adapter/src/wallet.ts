@@ -150,6 +150,30 @@ export class FlarexWallet {
     }
   }
 
+  cancelOperation() {
+    if (this._requestRetry == undefined) {
+      throw new Error('no pending retry operation');
+    }
+
+    this._requestRetry = undefined;
+
+    const msg = this.pendingMessage;
+    if (msg == null) {
+      throw new Error('no pending message');
+    }
+
+    this.pendingMessage = null;
+
+    const handler = this.handlers.get(msg.id);
+    if (handler == null) {
+      throw new Error('no handler');
+    }
+
+    this.handlers.delete(msg.id);
+
+    handler.reject(new Error('operation cancelled'));
+  }
+
   getPublicKey(): Promise<PublicKey> {
     return new Promise((resolve, reject) => {
       if (this.pendingMessage != null) {

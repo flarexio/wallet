@@ -12,13 +12,15 @@
     </mat-form-field>
 
   @if (msg != undefined) {
-    <mat-button-toggle-group name="display" hideSingleSelectionIndicator 
-                             (valueChange)="displayChangeHandler($event)">
-      <mat-button-toggle value="text">Text</mat-button-toggle>
-      <mat-button-toggle value="json">JSON</mat-button-toggle>
-      <mat-button-toggle value="hex">Hex</mat-button-toggle>
-      <mat-button-toggle value="base64">Base64</mat-button-toggle>
-    </mat-button-toggle-group>
+    <div class="display-selector">
+      <mat-button-toggle-group name="display" hideSingleSelectionIndicator 
+                               (valueChange)="displayChangeHandler($event)">
+        <mat-button-toggle value="text">Text</mat-button-toggle>
+        <mat-button-toggle value="json">JSON</mat-button-toggle>
+        <mat-button-toggle value="jwt">JWT</mat-button-toggle>
+        <mat-button-toggle value="hex">Hex</mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
   }
 
   @if (signature != '') {

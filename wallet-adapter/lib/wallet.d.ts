@@ -10,6 +10,7 @@ export declare class FlarexWallet {
     private messageHandler;
     openWindow(): void;
     retryOperation(): void;
+    cancelOperation(): void;
     getPublicKey(): Promise<PublicKey>;
     signMessage(message: Uint8Array): Promise<Uint8Array>;
     signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T>;

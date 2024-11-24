@@ -21,7 +21,6 @@ import {
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { v4 as uuid } from 'uuid';
 
-import { IdentityService } from '../identity.service';
 import { SolanaService, AssociatedTokenAccount } from '../solana.service';
 import { WalletService } from '../wallet.service';
 import { TransactionSnackbarComponent } from '../transaction-snackbar/transaction-snackbar.component';

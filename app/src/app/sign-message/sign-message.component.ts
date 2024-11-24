@@ -13,6 +13,8 @@ import { WalletMessage, WalletMessageType, SignMessagePayload } from '@flarex/wa
 import { v4 as uuid } from 'uuid';
 import * as base58 from 'bs58';
 
+import * as jose from 'jose';
+
 import { WalletService } from '../wallet.service';
 
 @Component({
@@ -88,25 +90,39 @@ export class SignMessageComponent {
 
     const payload = msg.payload as SignMessagePayload;
     const msgStr = Buffer.from(payload.message).toString();
-    switch (display) {
-      case 'json':
-        const msg = JSON.parse(msgStr);
-        this.message = JSON.stringify(msg, null, 2);
-        break;
 
-      case 'hex':
-        this.message = Array.from(msgStr)
-          .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
-          .join(' ');
-        break;
+    try {
+      switch (display) {
+        case 'json':
+          const msg = JSON.parse(msgStr);
+          this.message = JSON.stringify(msg, null, 2);
+          break;
 
-      case 'base64':
-        this.message = btoa(msgStr);
-        break;
+        case 'hex':
+          this.message = Array.from(msgStr)
+            .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+            .join(' ');
+          break;
 
-      default:
-        this.message = msgStr;
-        break;
+        case 'jwt':
+          const ss = msgStr.split('.');
+          const headerBytes = jose.base64url.decode(ss[0]);
+          let header = Buffer.from(headerBytes).toString();
+          header = JSON.stringify(JSON.parse(header), null, 2);
+
+          const payloadBytes = jose.base64url.decode(ss[1]);
+          let payload = Buffer.from(payloadBytes).toString();
+          payload = JSON.stringify(JSON.parse(payload), null, 2);
+
+          this.message = `header:\n${header}\n\n---\npayload:\n${payload}`;
+          break;
+
+        default:
+          this.message = msgStr;
+          break;
+      }
+    } catch (err) {
+      this.message = msgStr;
     }
   }
 }

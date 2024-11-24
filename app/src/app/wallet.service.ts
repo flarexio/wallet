@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, catchError, concatMap, map, of, share } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, concatMap, map, of } from 'rxjs';
 
 import { 
   WalletMessage, WalletMessageType, WalletMessageResponse,
