@@ -26,6 +26,12 @@ func TestGoogleKeyService(t *testing.T) {
 		return
 	}
 
+	_, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS")
+	if !ok {
+		t.Skip(`"GOOGLE_APPLICATION_CREDENTIALS" is not set`)
+		return
+	}
+
 	svc, err := NewGoogleKeysService(cfg.Keys.Google)
 	if err != nil {
 		assert.Fail(err.Error())
