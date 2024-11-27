@@ -1,0 +1,4 @@
+FROM caddy:2.8.4-alpine
+ADD build/Caddyfile /etc/caddy/Caddyfile
+ADD app/dist/app /app/
+EXPOSE 80

@@ -117,7 +117,7 @@ export class TokenTransferComponent {
     }
 
     if (wallet.hasError('required')) {
-      return 'You must enter the receiving wallet';
+      return 'Must enter the receiving wallet';
     }
 
     if (wallet.hasError('wallet')) {
@@ -133,7 +133,7 @@ export class TokenTransferComponent {
     }
 
     if (amount.hasError('required')) {
-      return 'You must enter the transfer amount';
+      return 'Must enter the transfer amount';
     }
 
     if (amount.hasError('amount')) {
