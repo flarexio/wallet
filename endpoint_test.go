@@ -14,7 +14,7 @@ func TestSignTransaction(t *testing.T) {
 	assert := assert.New(t)
 
 	jsonStr := `{
-    	"tx": "AUxmDVEjHdhE/OZBPho1Fdd88czxuR6HWLwPImTXHDde9HflsFWvoNkBwQKEEglLYVEMRHQpt6ZBQgRN+S+kngyAAQABBIWoLkhOe3hh6oAqa6hiLEMT00sl0kyvr3MDCIr8uPQmpN7WQKXTyLBX3+cRuRRTT4YAzIew2h2FkQhd3T3vw97M7AC0UN8mhMbaYQECJb9KqJ+8ub9oQQa0lCBE2Y4Mzwbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpAzT6gw+Tyy0CM1xciNYzBYeMsiuhDk+wLJu2f5uxGrABAwMBAgAJAwCAxqR+jQMAAA=="
+    	"transaction": "AUxmDVEjHdhE/OZBPho1Fdd88czxuR6HWLwPImTXHDde9HflsFWvoNkBwQKEEglLYVEMRHQpt6ZBQgRN+S+kngyAAQABBIWoLkhOe3hh6oAqa6hiLEMT00sl0kyvr3MDCIr8uPQmpN7WQKXTyLBX3+cRuRRTT4YAzIew2h2FkQhd3T3vw97M7AC0UN8mhMbaYQECJb9KqJ+8ub9oQQa0lCBE2Y4Mzwbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpAzT6gw+Tyy0CM1xciNYzBYeMsiuhDk+wLJu2f5uxGrABAwMBAgAJAwCAxqR+jQMAAA=="
 	}`
 
 	var req SignTransactionRequest
