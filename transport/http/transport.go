@@ -1,4 +1,4 @@
-package wallet
+package http
 
 import (
 	"encoding/base64"
@@ -9,7 +9,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-webauthn/webauthn/protocol"
+
+	"github.com/flarexio/wallet"
 )
+
+func HealthHandler(c *gin.Context) {
+	c.String(http.StatusOK, "ok")
+}
 
 func WalletHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -41,7 +47,7 @@ func SignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *SignMessageRequest
+		var req *wallet.SignMessageRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -71,7 +77,7 @@ func InitializeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *InitializeSignMessageRequest
+		var req *wallet.InitializeSignMessageRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -122,7 +128,7 @@ func SignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *SignTransactionRequest
+		var req *wallet.SignTransactionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -152,7 +158,7 @@ func InitializeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFun
 			return
 		}
 
-		var req *InitializeSignTransactionRequest
+		var req *wallet.InitializeSignTransactionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -196,7 +202,7 @@ func FinalizeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc 
 
 func CreateSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var req *CreateSessionRequest
+		var req *wallet.CreateSessionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())
@@ -211,7 +217,7 @@ func CreateSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		result, ok := resp.(*CreateSessionResponse)
+		result, ok := resp.(*wallet.CreateSessionResponse)
 		if !ok {
 			err := errors.New("invalid type")
 			c.Abort()
@@ -284,7 +290,7 @@ func AckSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
-		var req *AckSessionRequest
+		var req *wallet.AckSessionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
 			c.String(http.StatusBadRequest, err.Error())

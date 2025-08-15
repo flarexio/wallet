@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -15,14 +15,12 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
+	"github.com/flarexio/core/policy"
+	"github.com/flarexio/identity/passkeys"
 	"github.com/flarexio/wallet"
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/persistence"
-
-	"github.com/flarexio/identity/passkeys"
-	"github.com/flarexio/identity/policy"
-
-	identityHTTP "github.com/flarexio/identity/transport/http"
+	"github.com/flarexio/wallet/transport/http"
 )
 
 func main() {
@@ -102,78 +100,74 @@ func run(cli *cli.Context) error {
 
 	r := gin.Default()
 
-	identityHTTP.Init(
-		cfg.Identity.BaseURL,
-		cfg.Identity.JWT.Audiences[0],
-		cfg.Identity.JWT.Secret,
-	)
-
 	ctx := context.Background()
-	policy, err := policy.NewRegoPolicy(ctx, conf.Path)
+
+	http.Init(cfg.JWT)
+
+	permissionsPath := filepath.Join(path, "permissions.json")
+	policy, err := policy.NewRegoPolicy(ctx, permissionsPath)
 	if err != nil {
 		return err
 	}
 
-	auth := identityHTTP.Authorizator(policy)
+	auth := http.JWTAuthorizator(policy)
 
 	api := r.Group("/wallet/v1")
 	{
 		// GET /health
-		api.GET("/health", func(c *gin.Context) {
-			c.String(http.StatusOK, "ok")
-		})
+		api.GET("/health", http.HealthHandler)
 
 		// GET /accounts/:user
 		{
 			endpoint := wallet.WalletEndpoint(svc)
-			api.GET("/accounts/:user", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.WalletHandler(endpoint))
+			api.GET("/accounts/:user", auth("wallet::accounts.get", http.Owner),
+				http.WalletHandler(endpoint))
 		}
 
 		// POST /accounts/:user/message-signatures
 		{
 			endpoint := wallet.InitializeSignMessageEndpoint(svc)
-			api.POST("/accounts/:user/message-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.InitializeSignMessageHandler(endpoint))
+			api.POST("/accounts/:user/message-signatures", auth("wallet::accounts.get", http.Owner),
+				http.InitializeSignMessageHandler(endpoint))
 		}
 
 		// PUT /accounts/:user/message-signatures
 		{
 			endpoint := wallet.FinalizeSignMessageEndpoint(svc)
-			api.PUT("/accounts/:user/message-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.FinalizeSignMessageHandler(endpoint))
+			api.PUT("/accounts/:user/message-signatures", auth("wallet::accounts.get", http.Owner),
+				http.FinalizeSignMessageHandler(endpoint))
 		}
 
 		// POST /accounts/:user/transaction-signatures
 		{
 			endpoint := wallet.InitializeSignTransactionEndpoint(svc)
-			api.POST("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.InitializeSignTransactionHandler(endpoint))
+			api.POST("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", http.Owner),
+				http.InitializeSignTransactionHandler(endpoint))
 		}
 
 		// PUT /accounts/:user/transaction-signatures
 		{
 			endpoint := wallet.FinalizeSignTransactionEndpoint(svc)
-			api.PUT("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", identityHTTP.Owner),
-				wallet.FinalizeSignTransactionHandler(endpoint))
+			api.PUT("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", http.Owner),
+				http.FinalizeSignTransactionHandler(endpoint))
 		}
 
 		// POST /sessions
 		{
 			endpoint := wallet.CreateSessionEndpoint(svc)
-			api.POST("/sessions", wallet.CreateSessionHandler(endpoint))
+			api.POST("/sessions", http.CreateSessionHandler(endpoint))
 		}
 
 		// GET /sessions/:session
 		{
 			endpoint := wallet.SessionDataEndpoint(svc)
-			api.GET("/sessions/:session", wallet.SessionDataHandler(endpoint))
+			api.GET("/sessions/:session", http.SessionDataHandler(endpoint))
 		}
 
 		// POST /sessions/:session/ack
 		{
 			endpoint := wallet.AckSessionEndpoint(svc)
-			api.POST("/sessions/:session/ack", wallet.AckSessionHandler(endpoint))
+			api.POST("/sessions/:session/ack", http.AckSessionHandler(endpoint))
 		}
 	}
 

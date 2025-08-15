@@ -13,7 +13,7 @@ trigger:
 
 steps:
 - name: build-backend
-  image: golang:1.23
+  image: golang:1.24.5
   volumes:
   - name: deps
     path: /go
@@ -22,7 +22,7 @@ steps:
   - go build cmd/wallet/main.go
 
 - name: test-backend
-  image: golang:1.23
+  image: golang:1.24.5
   volumes:
   - name: deps
     path: /go
@@ -48,14 +48,14 @@ trigger:
 
 steps:
 - name: build-frontend
-  image: flarexio/angular:19
+  image: flarexio/angular:20
   commands:
   - cd app
   - npm install
   - ng build
 
 - name: build-backend
-  image: golang:1.23-alpine
+  image: golang:1.24.5-alpine
   commands:
   - apk add git gcc musl-dev
   - go build -o release/linux/amd64/wallet cmd/wallet/main.go

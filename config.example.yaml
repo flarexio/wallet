@@ -24,12 +24,10 @@ persistence:
         path: # default: $HOME/.flarex/wallet
         # inmem: false
 
-identity:
-  baseURL: identity.flarex.io
-  jwt:
-    secret: jwt_secret_key
-    audiences:
-    - wallet.flarex.io
+jwt:
+  issuer: identity.flarex.io
+  audience: talkix.flarex.io
+  jwksURL: https://identity.flarex.io/.well-known/jwks.json
 
 passkeys:
   baseURL: https://passkeys.hanko.io

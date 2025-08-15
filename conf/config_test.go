@@ -48,5 +48,7 @@ func TestConfig(t *testing.T) {
 	assert.Equal(Path, composite.Main.Solana.Path)
 	assert.Equal("id.json", composite.Main.Solana.Account)
 
-	assert.Equal("identity.flarex.io", cfg.Identity.BaseURL)
+	assert.Equal("identity.flarex.io", cfg.JWT.Issuer)
+	assert.Equal("talkix.flarex.io", cfg.JWT.Audience)
+	assert.Equal("https://identity.flarex.io/.well-known/jwks.json", cfg.JWT.JWKsURL)
 }

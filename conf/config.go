@@ -15,7 +15,7 @@ var (
 type Config struct {
 	Keys        KeyConfig             `yaml:"keys"`
 	Persistence PersistenceConfig     `yaml:"persistence"`
-	Identity    IdentityConfig        `yaml:"identity"`
+	JWT         JWTConfig             `yaml:"jwt"`
 	Passkeys    conf.PasskeysProvider `yaml:"passkeys"`
 }
 
@@ -158,28 +158,8 @@ func (cfg *SolanaPersistenceConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type IdentityConfig struct {
-	BaseURL string    `yaml:"baseURL"`
-	JWT     JWTConfig `yaml:"jwt"`
-}
-
 type JWTConfig struct {
-	Secret    []byte   `yaml:"secret"`
-	Audiences []string `yaml:"audiences"`
-}
-
-func (cfg *JWTConfig) UnmarshalYAML(value *yaml.Node) error {
-	var raw struct {
-		Secret    string   `yaml:"secret"`
-		Audiences []string `yaml:"audiences"`
-	}
-
-	if err := value.Decode(&raw); err != nil {
-		return err
-	}
-
-	cfg.Secret = []byte(raw.Secret)
-	cfg.Audiences = raw.Audiences
-
-	return nil
+	Issuer   string `yaml:"issuer"`
+	Audience string `yaml:"audience"`
+	JWKsURL  string `yaml:"jwksURL"`
 }
