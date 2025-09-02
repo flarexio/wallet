@@ -31,26 +31,27 @@ export class WalletService {
     private identity: IdentityService,
   ) {
     this.identity.userChange.pipe(
-      concatMap((user) => this.wallet(user)),
+      concatMap((user) => {
+        console.log('User changed in wallet service:', user?.username);
+        return this.wallet(user);
+      }),
     ).subscribe({
-      next: (wallet) => this._currentWallet = wallet,
-      error: (err) => console.error(err),
-      complete: () => console.log('complete'),
+      next: (wallet) => {
+        console.log('Wallet updated:', wallet?.toBase58());
+        this.currentWallet = wallet; // 這會觸發 _walletSubject.next()
+      },
+      error: (err) => console.error('Wallet service error:', err),
+      complete: () => console.log('Wallet service complete'),
     });
   }
 
-  refreshWallet() {
-    const wallet = this._currentWallet;
-    this._walletSubject.next(wallet);
-  }
-
   wallet(user: User | undefined): Observable<PublicKey | null> {
-    if (user == undefined) {
+    if (!user) {
       return of(null);
     }
 
     const token = this.identity.currentToken;
-    if (token == undefined) {
+    if (!token) {
       return of(null);
     }
 
@@ -59,12 +60,17 @@ export class WalletService {
     ).pipe(
       map((raw) => {
         const address = raw as string;
-        const pubkey = new PublicKey(address);
-
-        this.currentWallet = pubkey;
-        return pubkey;
+        return new PublicKey(address);
+      }),
+      catchError(error => {
+        console.error('Error fetching wallet:', error);
+        return of(null);
       })
     );
+  }
+
+  refreshWallet() {
+    this._walletSubject.next(this._currentWallet);
   }
 
   session(session: string): Observable<WalletMessage> {
@@ -283,8 +289,8 @@ export class WalletService {
     return this._currentWallet;
   }
   public set currentWallet(wallet: PublicKey | null) {
+    console.log('Setting current wallet:', wallet?.toBase58());
     this._currentWallet = wallet;
-
     this._walletSubject.next(wallet);
   }
 }

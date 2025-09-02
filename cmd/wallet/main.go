@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
@@ -24,35 +23,34 @@ import (
 )
 
 func main() {
-	app := &cli.App{
+	cmd := &cli.Command{
 		Name: "wallet",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "path",
-				EnvVars: []string{"WALLET_PATH"},
+				Sources: cli.EnvVars("WALLET_PATH"),
 			},
 			&cli.IntFlag{
 				Name:    "port",
-				EnvVars: []string{"WALLET_SERVICE_PORT"},
+				Sources: cli.EnvVars("WALLET_SERVICE_PORT"),
 				Value:   8080,
 			},
 		},
 		Action: run,
 	}
 
-	err := app.Run(os.Args)
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	err := cmd.Run(ctx, os.Args)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3000*time.Millisecond)
-	defer cancel()
-
-	<-ctx.Done()
 }
 
-func run(cli *cli.Context) error {
-	path := cli.String("path")
+func run(ctx context.Context, cmd *cli.Command) error {
+	path := cmd.String("path")
 	if path == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -100,9 +98,7 @@ func run(cli *cli.Context) error {
 
 	r := gin.Default()
 
-	ctx := context.Background()
-
-	http.Init(cfg.JWT)
+	http.Init(ctx, cfg.JWT)
 
 	permissionsPath := filepath.Join(path, "permissions.json")
 	policy, err := policy.NewRegoPolicy(ctx, permissionsPath)
@@ -171,7 +167,7 @@ func run(cli *cli.Context) error {
 		}
 	}
 
-	port := cli.Int("port")
+	port := cmd.Int("port")
 	go r.Run(":" + strconv.Itoa(port))
 
 	// Setup signal handling for graceful shutdown

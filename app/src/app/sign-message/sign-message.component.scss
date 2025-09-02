@@ -20,5 +20,20 @@
 
 .display-selector {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  margin: 20px 0;
+
+  mat-button-toggle-group {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  mat-button-toggle {
+    border: none;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.04);
+    }
+  }
 }

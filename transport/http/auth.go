@@ -85,7 +85,7 @@ func ParseToken(c *gin.Context, claims jwt.Claims) error {
 		return errors.New("invalid authorization header format")
 	}
 
-	_, err := jwt.ParseWithClaims(tokenStr, claims, keyFn,
+	_, err := jwt.ParseWithClaims(tokenStr, claims, KeyFunc,
 		jwt.WithIssuer(issuer),
 		jwt.WithAudience(audience),
 		jwt.WithLeeway(10*time.Second),

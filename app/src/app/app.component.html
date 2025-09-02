@@ -1,105 +1,187 @@
 <mat-drawer-container fullscreen>
   <header>
     <mat-toolbar>
-    @if (user == undefined) {
-      <span class="spacer"></span>
+      <!-- Logo Section -->
+      <div class="logo-section">
+        <div class="logo-icon">
+          <mat-icon fontSet="material-symbols-outlined">account_balance_wallet</mat-icon>
+        </div>
+        <span class="logo-text">FlareX Wallet</span>
+      </div>
 
-      <!-- Sign in with Google -->
-      <div id="googleSignIn" matTooltip="Sign in with Google"></div> 
+      @if (user == undefined) {
+        <span class="spacer"></span>
+        
+        <div class="auth-buttons">
+          <!-- Sign in with Google -->
+          <div id="googleSignIn" matTooltip="Sign in with Google"></div> 
 
-      <!-- Sign in with a passkey -->
-      <button mat-icon-button matTooltip="Sign in with a Passkey" 
-              (click)="passkeyLoginHandler()">
-        <mat-icon fontSet="material-symbols-outlined">
-          passkey
-        </mat-icon>
-      </button>
-    } @else {
-      <mat-button-toggle-group hideSingleSelectionIndicator value="cloud">
-        <mat-button-toggle value="cloud">
-          Cloud
-        </mat-button-toggle>
-        <mat-button-toggle value="edge" disabled>
-          Edge
-        </mat-button-toggle>
-      </mat-button-toggle-group>
+          <!-- Sign in with a passkey -->
+          <button mat-icon-button 
+                  class="passkey-button"
+                  matTooltip="Sign in with a Passkey" 
+                  (click)="passkeyLoginHandler()">
+            <mat-icon fontSet="material-symbols-outlined">passkey</mat-icon>
+          </button>
+        </div>
+      } @else {
+        <span class="spacer"></span>
 
-      <span class="spacer"></span>
-
-      <button mat-button [matMenuTriggerFor]="menu">
-        <mat-icon>
-          <img class="avatar-image" [src]="user.avatar">
-        </mat-icon>
-        {{ user.username }}
-      </button>
-      <mat-menu #menu="matMenu" yPosition="below">
-        <button mat-menu-item disabled>
+        <!-- User Menu -->
+        <button mat-button 
+                class="user-menu-button"
+                [matMenuTriggerFor]="menu">
           <mat-icon>
-            person
+            <img class="avatar-image" [src]="user.avatar" [alt]="user.username" loading="lazy">
           </mat-icon>
-          Profile
+          <span>{{ user.username }}</span>
+          <mat-icon>expand_more</mat-icon>
         </button>
-        <button mat-menu-item (click)="registerPasskey()">
-          <mat-icon fontSet="material-symbols-outlined">
-            passkey
-          </mat-icon>
-          Register Passkey
-        </button>
-        <button mat-menu-item (click)="logout()">
-          <mat-icon>
-            logout
-          </mat-icon>
-          Logout
-        </button>
-      </mat-menu>
-    }
+        <mat-menu #menu="matMenu" yPosition="below">
+          <button mat-menu-item disabled>
+            <mat-icon>person</mat-icon>
+            <span>Profile Settings</span>
+          </button>
+          <button mat-menu-item (click)="registerPasskey()">
+            <mat-icon fontSet="material-symbols-outlined">passkey</mat-icon>
+            <span>Register Passkey</span>
+          </button>
+          <mat-divider></mat-divider>
+          <button mat-menu-item class="danger-action" (click)="logout()">
+            <mat-icon>logout</mat-icon>
+            <span>Sign Out</span>
+          </button>
+        </mat-menu>
+      }
     </mat-toolbar>
   </header>
 
+  <!-- Main Wallet Card -->
   <mat-card class="wallet-card" appearance="outlined">
-  @if (account | async; as result) {
-    <mat-card-header>
-      <mat-card-title [matTooltip]="result.account" 
-                      (click)="copyAccount(result.account)">
-        {{ result.account | slice: 0:6 }}...{{ result.account | slice: -6 }}
-      </mat-card-title>
-      <mat-card-subtitle>{{ result.balance | currency: '◎' }}</mat-card-subtitle>
-    </mat-card-header>
-  }
+    @if (account | async; as accountData) {
+      <mat-card-header>
+        <div class="header-content">
+          <div class="wallet-info">
+            <!-- 地址區塊 -->
+            <div class="address-section">
+              <div class="address-label">
+                <mat-icon fontSet="material-symbols-outlined">account_balance_wallet</mat-icon>
+                Wallet Address
+              </div>
+              <div class="address-display" 
+                   matTooltip="Click to copy wallet address" 
+                   (click)="copyAccount(accountData.account)">
+                <span class="address-text">
+                  {{ accountData.account }}
+                </span>
+                <mat-icon class="copy-icon" fontSet="material-symbols-outlined">content_copy</mat-icon>
+              </div>
+            </div>
+            
+            <!-- 餘額區塊 -->
+            <div class="balance-section">
+              <div class="balance-label">Available Balance</div>
+              <div class="balance-display">
+                <span class="balance-amount">{{ accountData.balance | number: '1.0-4' }}</span>
+                <span class="balance-currency">SOL</span>
+              </div>
+              <!-- USD 價值 - 異步顯示 -->
+              <div class="balance-usd">
+                @if (solanaPrice | async; as priceInfo) {
+                  <span class="usd-value" 
+                        [matTooltip]="getPriceTooltip(priceInfo)"
+                        matTooltipClass="price-tooltip">
+                    ≈ {{ calculateUsdValue(accountData.balance, priceInfo.price) | currency:'USD':'symbol':'1.2-2' }}
+                  </span>
+                } @else {
+                  <span class="loading-price">Loading price data...</span>
+                }
+              </div>
+            </div>
+          </div>
+          
+          <div class="header-actions">
+            <button mat-icon-button 
+                    [matTooltip]="'View on Solana Explorer'"
+                    (click)="browseAccount(accountData.account, network)">
+              <mat-icon fontSet="material-symbols-outlined">open_in_new</mat-icon>
+            </button>
+            <button mat-icon-button 
+                    matTooltip="Request Airdrop (Devnet/Testnet only)"
+                    (click)="requestAirdrop()"
+                    [disabled]="network === 'mainnet-beta'">
+              <mat-icon fontSet="material-symbols-outlined">water_drop</mat-icon>
+            </button>
+            <button mat-icon-button 
+                    matTooltip="Refresh Balance"
+                    (click)="refreshTokens()">
+              <mat-icon fontSet="material-symbols-outlined">refresh</mat-icon>
+            </button>
+          </div>
+        </div>
+      </mat-card-header>
+    } @else {
+      <!-- 載入狀態 -->
+      <mat-card-header>
+        <div class="header-content">
+          <div class="wallet-info">
+            <div class="address-section">
+              <div class="address-label">
+                <mat-icon fontSet="material-symbols-outlined">account_balance_wallet</mat-icon>
+                Wallet Address
+              </div>
+              <div class="address-display">
+                <span class="address-text">Loading wallet...</span>
+              </div>
+            </div>
+            
+            <div class="balance-section">
+              <div class="balance-label">Available Balance</div>
+              <div class="balance-display">
+                <span class="balance-amount">--</span>
+                <span class="balance-currency">SOL</span>
+              </div>
+              <div class="balance-usd">
+                <span class="loading-price">Loading balance...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </mat-card-header>
+    }
 
     <mat-card-content>
       <router-outlet></router-outlet>
     </mat-card-content>
   </mat-card>
 
-  <button mat-fab class="fab-bottom-right" 
-          [matMenuTriggerFor]="boltMenu">
-    <mat-icon>bolt</mat-icon>
+  <!-- Quick Actions FAB -->
+  <button mat-fab 
+          class="fab-bottom-right" 
+          [matMenuTriggerFor]="boltMenu"
+          matTooltip="Quick Actions">
+    <mat-icon fontSet="material-symbols-outlined">bolt</mat-icon>
   </button>
-  <mat-menu #boltMenu="matMenu">
-@switch (currentUrl) {
-  @case ('/sign-message') {
-    <button mat-menu-item (click)="switchRouter('/')">
-      <mat-icon>home</mat-icon>
-      Home
-    </button>
-  }
-
-  @default {
-    <button mat-menu-item (click)="switchRouter('/sign-message')">
-      <mat-icon fontSet="material-symbols-outlined">
-        signature
-      </mat-icon>
-      Signature
-    </button>
-    <button mat-menu-item (click)="refreshTokens()">
-      <mat-icon>
-        refresh
-      </mat-icon>
-      Refresh
-    </button>
-  }
-}
+  
+  <mat-menu #boltMenu="matMenu" xPosition="before" class="fab-menu">
+    @switch (currentUrl) {
+      @case ('/sign-message') {
+        <button mat-menu-item (click)="switchRouter('/')">
+          <mat-icon>home</mat-icon>
+          <span>Dashboard</span>
+        </button>
+      }
+      @default {
+        <button mat-menu-item (click)="switchRouter('/sign-message')">
+          <mat-icon fontSet="material-symbols-outlined">signature</mat-icon>
+          <span>Sign Message</span>
+        </button>
+        <button mat-menu-item (click)="refreshTokens()">
+          <mat-icon>refresh</mat-icon>
+          <span>Refresh Tokens</span>
+        </button>
+      }
+    }
   </mat-menu>
 </mat-drawer-container>
 

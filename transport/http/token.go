@@ -1,12 +1,15 @@
 package http
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -16,23 +19,39 @@ import (
 var (
 	issuer   string
 	audience string
-	keyFn    jwt.Keyfunc
+	jwksURL  string
+
+	cachedKeys map[string]ed25519.PublicKey
+	cacheMu    sync.RWMutex
 )
 
-func Init(cfg conf.JWTConfig) error {
+func Init(ctx context.Context, cfg conf.JWTConfig) error {
 	issuer = cfg.Issuer
 	audience = cfg.Audience
+	jwksURL = cfg.JWKsURL
 
-	if cfg.JWKsURL == "" {
+	if jwksURL == "" {
 		return errors.New("JWKURL is required for JWT verification")
 	}
 
-	fn, err := fetchEd25519Keyfunc(cfg.JWKsURL)
-	if err != nil {
+	if err := refreshJWKS(); err != nil {
 		return err
 	}
 
-	keyFn = fn
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-ticker.C:
+				_ = refreshJWKS()
+			}
+		}
+	}()
 
 	return nil
 }
@@ -62,8 +81,37 @@ type JWKSet struct {
 	Keys []JWK `json:"keys"`
 }
 
-func fetchEd25519Keyfunc(jwkURL string) (jwt.Keyfunc, error) {
-	resp, err := http.Get(jwkURL)
+func refreshJWKS() error {
+	set, err := fetchJWKSet(jwksURL)
+	if err != nil {
+		return err
+	}
+
+	keys := make(map[string]ed25519.PublicKey)
+	for _, k := range set.Keys {
+		if k.Kty == "OKP" && k.Crv == "Ed25519" && k.X != "" {
+			pub, err := base64.RawURLEncoding.DecodeString(k.X)
+			if err != nil {
+				return err
+			}
+
+			keys[k.Kid] = ed25519.PublicKey(pub)
+		}
+	}
+
+	if len(keys) == 0 {
+		return errors.New("no Ed25519 key found in JWKS")
+	}
+
+	cacheMu.Lock()
+	cachedKeys = keys
+	cacheMu.Unlock()
+
+	return nil
+}
+
+func fetchJWKSet(url string) (*JWKSet, error) {
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +122,7 @@ func fetchEd25519Keyfunc(jwkURL string) (jwt.Keyfunc, error) {
 		return nil, err
 	}
 
-	var set JWKSet
+	var set *JWKSet
 	if err := json.Unmarshal(body, &set); err != nil {
 		return nil, err
 	}
@@ -83,33 +131,26 @@ func fetchEd25519Keyfunc(jwkURL string) (jwt.Keyfunc, error) {
 		return nil, errors.New("no keys in JWKS")
 	}
 
-	// 支援多把 key，依 kid 選擇
-	keys := make(map[string]ed25519.PublicKey)
-	for _, k := range set.Keys {
-		if k.Kty == "OKP" && k.Crv == "Ed25519" && k.X != "" {
-			pub, err := base64.RawURLEncoding.DecodeString(k.X)
-			if err != nil {
-				return nil, err
-			}
+	return set, nil
+}
 
-			keys[k.Kid] = ed25519.PublicKey(pub)
-		}
-	}
+func KeyFunc(token *jwt.Token) (any, error) {
+	cacheMu.RLock()
+	keys := cachedKeys
+	cacheMu.RUnlock()
 
 	if len(keys) == 0 {
-		return nil, errors.New("no Ed25519 key found in JWKS")
+		return nil, errors.New("no cached keys available")
 	}
 
-	return func(token *jwt.Token) (any, error) {
-		kid, _ := token.Header["kid"].(string)
-		if pub, ok := keys[kid]; ok {
-			return pub, nil
-		}
+	kid, _ := token.Header["kid"].(string)
+	if pub, ok := keys[kid]; ok {
+		return pub, nil
+	}
 
-		for _, pub := range keys {
-			return pub, nil
-		}
+	for _, pub := range keys {
+		return pub, nil
+	}
 
-		return nil, errors.New("no matching Ed25519 key found")
-	}, nil
+	return nil, errors.New("no matching Ed25519 key found")
 }
