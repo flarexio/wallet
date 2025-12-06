@@ -21,8 +21,10 @@ func WalletHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
+			err := errors.New("user is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "user is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -30,6 +32,7 @@ func WalletHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, username)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -42,14 +45,17 @@ func SignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
+			err := errors.New("user is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "user is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var req *wallet.SignMessageRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -60,6 +66,7 @@ func SignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -72,14 +79,17 @@ func InitializeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
+			err := errors.New("user is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "user is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var req *wallet.InitializeSignMessageRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -90,6 +100,7 @@ func InitializeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -103,6 +114,7 @@ func FinalizeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		req, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -111,6 +123,7 @@ func FinalizeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -123,14 +136,17 @@ func SignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
+			err := errors.New("user is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "user is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var req *wallet.SignTransactionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -141,6 +157,7 @@ func SignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -153,14 +170,17 @@ func InitializeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFun
 	return func(c *gin.Context) {
 		username := c.Param("user")
 		if username == "" {
+			err := errors.New("user is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "user is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var req *wallet.InitializeSignTransactionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -171,6 +191,7 @@ func InitializeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFun
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -184,6 +205,7 @@ func FinalizeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc 
 		req, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -192,6 +214,7 @@ func FinalizeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc 
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -205,6 +228,7 @@ func CreateSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		var req *wallet.CreateSessionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -213,6 +237,7 @@ func CreateSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -221,6 +246,7 @@ func CreateSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		if !ok {
 			err := errors.New("invalid type")
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -264,8 +290,10 @@ func SessionDataHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := c.Param("session")
 		if session == "" {
+			err := errors.New("session is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "session is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -273,6 +301,7 @@ func SessionDataHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		resp, err := endpoint(ctx, session)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}
@@ -285,14 +314,17 @@ func AckSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := c.Param("session")
 		if session == "" {
+			err := errors.New("session is required")
 			c.Abort()
-			c.String(http.StatusBadRequest, "session is required")
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var req *wallet.AckSessionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -303,6 +335,7 @@ func AckSessionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 		_, err := endpoint(ctx, req)
 		if err != nil {
 			c.Abort()
+			c.Error(err)
 			c.String(http.StatusExpectationFailed, err.Error())
 			return
 		}

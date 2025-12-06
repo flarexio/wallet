@@ -34,9 +34,7 @@ func Init(ctx context.Context, cfg conf.JWTConfig) error {
 		return errors.New("JWKURL is required for JWT verification")
 	}
 
-	if err := refreshJWKS(); err != nil {
-		return err
-	}
+	refreshJWKS()
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
@@ -48,7 +46,7 @@ func Init(ctx context.Context, cfg conf.JWTConfig) error {
 				return
 
 			case <-ticker.C:
-				_ = refreshJWKS()
+				refreshJWKS()
 			}
 		}
 	}()
