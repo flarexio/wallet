@@ -1,4 +1,10 @@
+FROM golang:1.24-alpine AS builder
+RUN apk add --no-cache git
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 go build -o /wallet cmd/wallet/main.go
+
 FROM alpine:3.22
+COPY --from=builder /wallet /bin/wallet
 EXPOSE 8080
-ADD release/linux/amd64/wallet /bin/
-ENTRYPOINT ["/bin/wallet"] 
+ENTRYPOINT ["/bin/wallet"]

@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and Push Frontend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile.frontend.linux.amd64
+          push: true
+          tags: flarexio/wallet-app:${{ github.ref_name }}-linux-amd64
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile.backend.linux.amd64
+          push: true
+          tags: flarexio/wallet:${{ github.ref_name }}-linux-amd64
+
+  release-manifest:
+    runs-on: ubuntu-latest
+    needs: release-linux-amd64
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Create and Push Frontend Manifest
+        run: |
+          docker manifest create flarexio/wallet-app:${{ github.ref_name }} \
+            flarexio/wallet-app:${{ github.ref_name }}-linux-amd64
+          docker manifest push flarexio/wallet-app:${{ github.ref_name }}
+
+      - name: Create and Push Backend Manifest
+        run: |
+          docker manifest create flarexio/wallet:${{ github.ref_name }} \
+            flarexio/wallet:${{ github.ref_name }}-linux-amd64
+          docker manifest push flarexio/wallet:${{ github.ref_name }}
