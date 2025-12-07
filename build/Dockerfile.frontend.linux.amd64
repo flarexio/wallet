@@ -1,4 +1,10 @@
+FROM node:20-alpine AS builder
+WORKDIR /src/app
+COPY app/ .
+RUN npm install
+RUN npx ng build
+
 FROM caddy:2.10.0-alpine
-ADD build/Caddyfile /etc/caddy/Caddyfile
-ADD app/dist/app /app/
+COPY build/Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /src/app/dist/app /app/
 EXPOSE 80
