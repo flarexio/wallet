@@ -11,6 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          echo "full=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -23,7 +33,10 @@ jobs:
           context: .
           file: build/Dockerfile.frontend.linux.amd64
           push: true
-          tags: flarexio/wallet-app:${{ github.ref_name }}-linux-amd64
+          tags: |
+            flarexio/wallet-app:${{ steps.version.outputs.full }}-linux-amd64
+            flarexio/wallet-app:${{ steps.version.outputs.minor }}-linux-amd64
+            flarexio/wallet-app:${{ steps.version.outputs.major }}-linux-amd64
 
       - name: Build and Push Backend Image
         uses: docker/build-push-action@v6
@@ -31,26 +44,43 @@ jobs:
           context: .
           file: build/Dockerfile.backend.linux.amd64
           push: true
-          tags: flarexio/wallet:${{ github.ref_name }}-linux-amd64
+          tags: |
+            flarexio/wallet:${{ steps.version.outputs.full }}-linux-amd64
+            flarexio/wallet:${{ steps.version.outputs.minor }}-linux-amd64
+            flarexio/wallet:${{ steps.version.outputs.major }}-linux-amd64
 
   release-manifest:
     runs-on: ubuntu-latest
     needs: release-linux-amd64
     steps:
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          echo "full=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      - name: Create and Push Frontend Manifest
+      - name: Create and Push Frontend Manifests
         run: |
-          docker manifest create flarexio/wallet-app:${{ github.ref_name }} \
-            flarexio/wallet-app:${{ github.ref_name }}-linux-amd64
-          docker manifest push flarexio/wallet-app:${{ github.ref_name }}
+          for TAG in ${{ steps.version.outputs.full }} ${{ steps.version.outputs.minor }} ${{ steps.version.outputs.major }}; do
+            docker manifest create flarexio/wallet-app:$TAG \
+              flarexio/wallet-app:$TAG-linux-amd64
+            docker manifest push flarexio/wallet-app:$TAG
+          done
 
-      - name: Create and Push Backend Manifest
+      - name: Create and Push Backend Manifests
         run: |
-          docker manifest create flarexio/wallet:${{ github.ref_name }} \
-            flarexio/wallet:${{ github.ref_name }}-linux-amd64
-          docker manifest push flarexio/wallet:${{ github.ref_name }}
+          for TAG in ${{ steps.version.outputs.full }} ${{ steps.version.outputs.minor }} ${{ steps.version.outputs.major }}; do
+            docker manifest create flarexio/wallet:$TAG \
+              flarexio/wallet:$TAG-linux-amd64
+            docker manifest push flarexio/wallet:$TAG
+          done
