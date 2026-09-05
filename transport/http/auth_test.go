@@ -46,3 +46,27 @@ func TestJWTAuthorizatorAcceptsWiredRules(t *testing.T) {
 		})
 	}
 }
+
+// who_flags of 0 makes rbac.rego skip the ownership check entirely (see
+// TestZeroWhoFlagsSkipsOwnership in the policy package), so wiring a route
+// without a Who has to fail at registration rather than at runtime.
+func TestJWTAuthorizatorRequiresWho(t *testing.T) {
+	assert := assert.New(t)
+
+	auth := JWTAuthorizator(nil)
+
+	const rule = "wallet::accounts.get"
+	want := `authorization rule "` + rule + `" needs at least one Who: who_flags 0 skips the ownership check`
+
+	t.Run("no who at all", func(t *testing.T) {
+		assert.PanicsWithValue(want, func() { auth(rule) })
+	})
+
+	t.Run("explicit zero", func(t *testing.T) {
+		assert.PanicsWithValue(want, func() { auth(rule, Who(0)) })
+	})
+
+	t.Run("a real who is accepted", func(t *testing.T) {
+		assert.NotPanics(func() { auth(rule, Owner) })
+	})
+}

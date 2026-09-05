@@ -97,3 +97,44 @@ func TestReadOnlyRoleCannotSign(t *testing.T) {
 	assert.False(eval("sign_message"))
 	assert.False(eval("sign_transaction"))
 }
+
+// rbac.rego (embedded in flarexio/core, so it cannot be changed from this
+// repo) allows any role-bearing token when who_flags is 0:
+//
+//	allow if {
+//		is_authorized
+//		count(authorized_users) == 0
+//	}
+//
+// Nothing about the object is checked, so bob's token reaches alice's wallet.
+// transport/http.JWTAuthorizator refuses to wire a route up that way; this
+// test records why that guard exists and will fail if core ever changes the
+// rule, at which point the guard can be revisited.
+func TestZeroWhoFlagsSkipsOwnership(t *testing.T) {
+	assert := assert.New(t)
+
+	ctx := context.Background()
+
+	p, err := policy.NewRegoPolicy(ctx, "data.json")
+	if !assert.NoError(err) {
+		return
+	}
+
+	input := func(whoFlags byte) map[string]any {
+		return map[string]any{
+			"domain":    "wallet::accounts",
+			"action":    "sign_transaction",
+			"who_flags": whoFlags,
+			"object":    "alice",
+			"claims":    claims("bob", "user"),
+		}
+	}
+
+	allowed, err := p.Eval(ctx, input(ownerFlag))
+	assert.NoError(err)
+	assert.False(allowed, "bob must not sign for alice when ownership is checked")
+
+	allowed, err = p.Eval(ctx, input(0))
+	assert.NoError(err)
+	assert.True(allowed, "who_flags 0 bypasses the ownership check -- this is why JWTAuthorizator panics on it")
+}

@@ -39,6 +39,14 @@ func JWTAuthorizator(policy policy.Policy) JWTAuth {
 			flags = flags | byte(w)
 		}
 
+		// who_flags of 0 leaves rbac.rego's authorized_users set empty, and its
+		// "count(authorized_users) == 0" clause then allows any token carrying a
+		// permitted role through with no ownership check at all. No wallet route
+		// wants that, so refuse to wire one up rather than silently downgrade.
+		if flags == 0 {
+			panic(`authorization rule "` + rule + `" needs at least one Who: who_flags 0 skips the ownership check`)
+		}
+
 		return func(c *gin.Context) {
 			var claims Claims
 			if err := ParseToken(c, &claims); err != nil {
