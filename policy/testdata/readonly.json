@@ -1,12 +1,10 @@
 {
     "role_permissions": {
-        "user": [
+        "reader": [
             {
                 "domain": "wallet::accounts",
                 "actions": [
-                    "get",
-                    "sign_message",
-                    "sign_transaction"
+                    "get"
                 ]
             }
         ]

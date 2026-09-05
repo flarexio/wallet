@@ -141,9 +141,21 @@ func KeyFunc(token *jwt.Token) (any, error) {
 		return nil, errors.New("no cached keys available")
 	}
 
+	// A token that names a key must match that key: falling back to an
+	// arbitrary entry would accept tokens signed by a key the issuer has
+	// already rotated away from.
 	kid, _ := token.Header["kid"].(string)
-	if pub, ok := keys[kid]; ok {
+	if kid != "" {
+		pub, ok := keys[kid]
+		if !ok {
+			return nil, errors.New("no matching Ed25519 key found")
+		}
+
 		return pub, nil
+	}
+
+	if len(keys) > 1 {
+		return nil, errors.New("token has no kid and JWKS holds multiple keys")
 	}
 
 	for _, pub := range keys {

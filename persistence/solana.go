@@ -47,7 +47,7 @@ func (repo *solanaAccountRepository) CacheTransaction(t *account.Transaction, tt
 	return errors.New("not implemented")
 }
 
-func (repo *solanaAccountRepository) RemoveTransactionByID(id account.TransactionID) (*account.Transaction, error) {
+func (repo *solanaAccountRepository) RemoveTransaction(subject string, id account.TransactionID) (*account.Transaction, error) {
 	return nil, errors.New("not implemented")
 }
 

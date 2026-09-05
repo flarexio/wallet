@@ -67,18 +67,26 @@ func InitializeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
+// FinalizeSignMessageRequest pairs the passkey assertion with the account it
+// is being finalized against, so the cached signature can be checked to belong
+// to that account before it is released.
+type FinalizeSignMessageRequest struct {
+	Subject   string
+	Assertion *protocol.ParsedCredentialAssertionData
+}
+
 type FinalizeSignMessageResponse struct {
 	Signature solana.Signature `json:"signature"`
 }
 
 func FinalizeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req, ok := request.(*protocol.ParsedCredentialAssertionData)
+		req, ok := request.(*FinalizeSignMessageRequest)
 		if !ok {
 			return nil, errors.New("invalid type")
 		}
 
-		sig, err := svc.FinalizeSignMessage(req)
+		sig, err := svc.FinalizeSignMessage(req.Subject, req.Assertion)
 		if err != nil {
 			return nil, err
 		}
@@ -215,6 +223,11 @@ func InitializeSignTransactionEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
+type FinalizeSignTransactionRequest struct {
+	Subject   string
+	Assertion *protocol.ParsedCredentialAssertionData
+}
+
 type FinalizeSignTransactionResponse struct {
 	Transaction *solana.Transaction
 	Versioned   bool
@@ -242,12 +255,12 @@ func (resp *FinalizeSignTransactionResponse) MarshalJSON() ([]byte, error) {
 
 func FinalizeSignTransactionEndpoint(svc Service) endpoint.Endpoint {
 	return func(ctx context.Context, request any) (any, error) {
-		req, ok := request.(*protocol.ParsedCredentialAssertionData)
+		req, ok := request.(*FinalizeSignTransactionRequest)
 		if !ok {
 			return nil, errors.New("invalid type")
 		}
 
-		transaction, versioned, err := svc.FinalizeSignTransaction(req)
+		transaction, versioned, err := svc.FinalizeSignTransaction(req.Subject, req.Assertion)
 		if err != nil {
 			return nil, err
 		}

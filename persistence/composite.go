@@ -89,8 +89,8 @@ func (repo *compositeAccountRepository) CacheTransaction(t *account.Transaction,
 	return repo.cache.CacheTransaction(t, ttl)
 }
 
-func (repo *compositeAccountRepository) RemoveTransactionByID(id account.TransactionID) (*account.Transaction, error) {
-	return repo.cache.RemoveTransactionByID(id)
+func (repo *compositeAccountRepository) RemoveTransaction(subject string, id account.TransactionID) (*account.Transaction, error) {
+	return repo.cache.RemoveTransaction(subject, id)
 }
 
 func (repo *compositeAccountRepository) Close() error {

@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	nethttp "net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli/v3"
@@ -98,7 +101,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 	r := gin.Default()
 
-	http.Init(ctx, cfg.JWT)
+	if err := http.Init(ctx, cfg.JWT); err != nil {
+		return err
+	}
 
 	permissionsPath := filepath.Join(path, "permissions.json")
 	policy, err := policy.NewRegoPolicy(ctx, permissionsPath)
@@ -123,28 +128,28 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		// POST /accounts/:user/message-signatures
 		{
 			endpoint := wallet.InitializeSignMessageEndpoint(svc)
-			api.POST("/accounts/:user/message-signatures", auth("wallet::accounts.get", http.Owner),
+			api.POST("/accounts/:user/message-signatures", auth("wallet::accounts.sign_message", http.Owner),
 				http.InitializeSignMessageHandler(endpoint))
 		}
 
 		// PUT /accounts/:user/message-signatures
 		{
 			endpoint := wallet.FinalizeSignMessageEndpoint(svc)
-			api.PUT("/accounts/:user/message-signatures", auth("wallet::accounts.get", http.Owner),
+			api.PUT("/accounts/:user/message-signatures", auth("wallet::accounts.sign_message", http.Owner),
 				http.FinalizeSignMessageHandler(endpoint))
 		}
 
 		// POST /accounts/:user/transaction-signatures
 		{
 			endpoint := wallet.InitializeSignTransactionEndpoint(svc)
-			api.POST("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", http.Owner),
+			api.POST("/accounts/:user/transaction-signatures", auth("wallet::accounts.sign_transaction", http.Owner),
 				http.InitializeSignTransactionHandler(endpoint))
 		}
 
 		// PUT /accounts/:user/transaction-signatures
 		{
 			endpoint := wallet.FinalizeSignTransactionEndpoint(svc)
-			api.PUT("/accounts/:user/transaction-signatures", auth("wallet::accounts.get", http.Owner),
+			api.PUT("/accounts/:user/transaction-signatures", auth("wallet::accounts.sign_transaction", http.Owner),
 				http.FinalizeSignTransactionHandler(endpoint))
 		}
 
@@ -168,14 +173,34 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	port := cmd.Int("port")
-	go r.Run(":" + strconv.Itoa(port))
+
+	srv := &nethttp.Server{
+		Addr:    ":" + strconv.Itoa(port),
+		Handler: r,
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		err := srv.ListenAndServe()
+		if err != nil && !errors.Is(err, nethttp.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
 
 	// Setup signal handling for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	sign := <-quit // Wait for a termination signal
+	select {
+	case err := <-serverErr: // the listener never came up, or died
+		return err
 
-	log.Info("graceful shutdown", zap.String("singal", sign.String()))
-	return nil
+	case sign := <-quit: // Wait for a termination signal
+		log.Info("graceful shutdown", zap.String("signal", sign.String()))
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return srv.Shutdown(shutdownCtx)
 }
