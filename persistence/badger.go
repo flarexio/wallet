@@ -67,8 +67,13 @@ func (repo *badgerAccountRepository) Find(subject string) (*account.Account, err
 	return a, nil
 }
 
+// Transaction ids come from the client, so they are namespaced by subject.
+func transactionKey(subject string, id account.TransactionID) []byte {
+	return []byte("tx:" + subject + ":" + id.String())
+}
+
 func (repo *badgerAccountRepository) CacheTransaction(t *account.Transaction, ttl time.Duration) error {
-	key := []byte("tx:" + t.TransactionID.String())
+	key := transactionKey(t.Subject, t.TransactionID)
 
 	bs, err := json.Marshal(&t)
 	if err != nil {
@@ -81,10 +86,10 @@ func (repo *badgerAccountRepository) CacheTransaction(t *account.Transaction, tt
 	})
 }
 
-func (repo *badgerAccountRepository) RemoveTransactionByID(id account.TransactionID) (*account.Transaction, error) {
+func (repo *badgerAccountRepository) RemoveTransaction(subject string, id account.TransactionID) (*account.Transaction, error) {
 	var t *account.Transaction
 
-	key := []byte("tx:" + id.String())
+	key := transactionKey(subject, id)
 
 	if err := repo.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
@@ -100,6 +105,10 @@ func (repo *badgerAccountRepository) RemoveTransactionByID(id account.Transactio
 			return json.Unmarshal(val, &t)
 		}); err != nil {
 			return err
+		}
+
+		if t.Subject != subject {
+			return account.ErrSubjectMismatch
 		}
 
 		return txn.Delete(key)

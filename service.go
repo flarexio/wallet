@@ -24,11 +24,11 @@ type Service interface {
 
 	SignMessage(subject string, message []byte) (solana.Signature, error)
 	InitializeSignMessage(req *InitializeSignMessageRequest) (*protocol.CredentialAssertion, string, error)
-	FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (solana.Signature, error)
+	FinalizeSignMessage(subject string, req *protocol.ParsedCredentialAssertionData) (solana.Signature, error)
 
 	SignTransaction(subject string, transaction *solana.Transaction) ([]solana.Signature, error)
 	InitializeSignTransaction(req *InitializeSignTransactionRequest) (*protocol.CredentialAssertion, string, error)
-	FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error)
+	FinalizeSignTransaction(subject string, req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error)
 
 	CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error)
 	SessionData(ctx context.Context, session string) ([]byte, error)
@@ -64,11 +64,51 @@ type service struct {
 	sync.Mutex
 }
 
+const (
+	sessionTTL     = 120 * time.Second
+	transactionTTL = 120 * time.Second
+
+	sessionIndexLen = 2
+)
+
+var (
+	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionExists   = errors.New("session already exists")
+	ErrSessionClosed   = errors.New("session already closed")
+)
+
+func sessionIndex(sig string) (string, error) {
+	if len(sig) < sessionIndexLen {
+		return "", ErrSessionNotFound
+	}
+
+	return sig[:sessionIndexLen], nil
+}
+
 type Session struct {
 	data   []byte
 	sig    string
-	ch     chan<- []byte
+	ch     chan []byte
 	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (s *Session) finish(data []byte) bool {
+	var done bool
+
+	s.once.Do(func() {
+		s.ch <- data
+		close(s.ch)
+		done = true
+	})
+
+	return done
+}
+
+func (s *Session) discard() {
+	s.once.Do(func() {
+		close(s.ch)
+	})
 }
 
 func (svc *service) findOrCreate(subject string) (*account.Account, error) {
@@ -132,21 +172,21 @@ func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*p
 		return nil, "", err
 	}
 
-	t, err := account.NewSignMessageTransaction(req.TransactionID, req.Message)
+	t, err := account.NewSignMessageTransaction(req.Subject, req.TransactionID, req.Message)
 	if err != nil {
 		return nil, "", err
 	}
 
 	t.Message.Signature = sig
 
-	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
+	if err := svc.accounts.CacheTransaction(t, transactionTTL); err != nil {
 		return nil, "", err
 	}
 
 	return opts, mediation, nil
 }
 
-func (svc *service) FinalizeSignMessage(req *protocol.ParsedCredentialAssertionData) (solana.Signature, error) {
+func (svc *service) FinalizeSignMessage(subject string, req *protocol.ParsedCredentialAssertionData) (solana.Signature, error) {
 	var sig solana.Signature
 
 	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
@@ -174,7 +214,7 @@ func (svc *service) FinalizeSignMessage(req *protocol.ParsedCredentialAssertionD
 		return sig, err
 	}
 
-	t, err := svc.accounts.RemoveTransactionByID(id)
+	t, err := svc.accounts.RemoveTransaction(subject, id)
 	if err != nil {
 		return sig, err
 	}
@@ -224,21 +264,21 @@ func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequ
 		return nil, "", err
 	}
 
-	t, err := account.NewSignTransaction(req.TransactionID, req.Transaction, req.Versioned)
+	t, err := account.NewSignTransaction(req.Subject, req.TransactionID, req.Transaction, req.Versioned)
 	if err != nil {
 		return nil, "", err
 	}
 
 	t.Transaction.Signatures = sigs
 
-	if err := svc.accounts.CacheTransaction(t, 120*time.Second); err != nil {
+	if err := svc.accounts.CacheTransaction(t, transactionTTL); err != nil {
 		return nil, "", err
 	}
 
 	return opts, mediation, nil
 }
 
-func (svc *service) FinalizeSignTransaction(req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error) {
+func (svc *service) FinalizeSignTransaction(subject string, req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error) {
 	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
 	if err != nil {
 		return nil, false, err
@@ -264,7 +304,7 @@ func (svc *service) FinalizeSignTransaction(req *protocol.ParsedCredentialAssert
 		return nil, false, err
 	}
 
-	t, err := svc.accounts.RemoveTransactionByID(id)
+	t, err := svc.accounts.RemoveTransaction(subject, id)
 	if err != nil {
 		return nil, false, err
 	}
@@ -279,7 +319,12 @@ func (svc *service) CreateSession(ctx context.Context, data []byte) (string, <-c
 	sig := ed25519.Sign(svc.privkey, data)
 	basedSig := base58.Encode(sig)
 
-	ch := make(chan []byte)
+	index, err := sessionIndex(basedSig)
+	if err != nil {
+		return "", nil, err
+	}
+
+	ch := make(chan []byte, 1)
 	ctx, cancel := context.WithCancel(ctx)
 
 	session := &Session{
@@ -289,12 +334,7 @@ func (svc *service) CreateSession(ctx context.Context, data []byte) (string, <-c
 		cancel: cancel,
 	}
 
-	go svc.sessionTimeout(ctx, session)
-
 	svc.Lock()
-	defer svc.Unlock()
-
-	index := basedSig[:2]
 
 	sessions, ok := svc.sessions[index]
 	if !ok {
@@ -303,87 +343,107 @@ func (svc *service) CreateSession(ctx context.Context, data []byte) (string, <-c
 
 	for _, s := range sessions {
 		if s.sig == session.sig {
-			return "", nil, errors.New("session already exists")
+			svc.Unlock()
+			cancel()
+			return "", nil, ErrSessionExists
 		}
 	}
 
 	svc.sessions[index] = append(sessions, session)
+	svc.Unlock()
+
+	go svc.sessionTimeout(ctx, session)
 
 	return basedSig, ch, nil
 }
 
 func (svc *service) sessionTimeout(ctx context.Context, session *Session) {
-	for {
-		select {
-		case <-ctx.Done():
-			close(session.ch)
+	timer := time.NewTimer(sessionTTL)
+	defer timer.Stop()
 
-			svc.Lock()
+	select {
+	case <-ctx.Done():
+		session.discard()
 
-			index := session.sig[:2]
-			sessions, ok := svc.sessions[index]
-			if ok {
-				for i, s := range sessions {
-					if s == session {
-						svc.sessions[index] = append(sessions[:i], sessions[i+1:]...)
-						break
-					}
-				}
+	case <-timer.C:
+		session.finish(nil) // nil payload tells the stream it timed out
+	}
 
-				if len(svc.sessions[index]) == 0 {
-					delete(svc.sessions, index)
-				}
-			}
+	svc.removeSession(session)
+}
 
-			svc.Unlock()
-			return
+func (svc *service) removeSession(session *Session) {
+	index, err := sessionIndex(session.sig)
+	if err != nil {
+		return
+	}
 
-		case <-time.After(120 * time.Second):
-			session.ch <- nil
-			session.cancel()
+	svc.Lock()
+	defer svc.Unlock()
+
+	sessions, ok := svc.sessions[index]
+	if !ok {
+		return
+	}
+
+	for i, s := range sessions {
+		if s == session {
+			svc.sessions[index] = append(sessions[:i], sessions[i+1:]...)
+			break
 		}
 	}
+
+	if len(svc.sessions[index]) == 0 {
+		delete(svc.sessions, index)
+	}
+}
+
+func (svc *service) lookupSession(session string) (*Session, error) {
+	index, err := sessionIndex(session)
+	if err != nil {
+		return nil, err
+	}
+
+	svc.Lock()
+	defer svc.Unlock()
+
+	sessions, ok := svc.sessions[index]
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+
+	for _, s := range sessions {
+		if s.sig == session {
+			return s, nil
+		}
+	}
+
+	return nil, ErrSessionNotFound
 }
 
 func (svc *service) SessionData(ctx context.Context, session string) ([]byte, error) {
-	svc.Lock()
-	defer svc.Unlock()
-
-	index := session[:2]
-	sessions, ok := svc.sessions[index]
-	if !ok {
-		return nil, errors.New("session not found")
+	s, err := svc.lookupSession(session)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, s := range sessions {
-		if s.sig == session {
-			return s.data, nil
-		}
-	}
-
-	return nil, errors.New("session not found")
+	return s.data, nil
 }
 
 func (svc *service) AckSession(ctx context.Context, session string, data []byte) error {
-	svc.Lock()
-	defer svc.Unlock()
-
-	index := session[:2]
-	sessions, ok := svc.sessions[index]
-	if !ok {
-		return errors.New("session not found")
+	s, err := svc.lookupSession(session)
+	if err != nil {
+		return err
 	}
 
-	for _, s := range sessions {
-		if s.sig == session {
-			s.ch <- data
-			defer s.cancel()
-
-			return nil
-		}
+	// Deliver outside the mutex: a stalled stream must not freeze other sessions.
+	if !s.finish(data) {
+		return ErrSessionClosed
 	}
 
-	return errors.New("session not found")
+	s.cancel()
+
+	return nil
 }
 
 func (svc *service) Close() error {

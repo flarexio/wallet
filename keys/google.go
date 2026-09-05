@@ -61,6 +61,19 @@ type googleKeyService struct {
 }
 
 func (svc *googleKeyService) Key(v ...int) (Key, error) {
+	keyVersion, err := svc.keyVersion(v...)
+	if err != nil {
+		return nil, err
+	}
+
+	// NewKey makes a network call, so it stays outside the lock.
+	return svc.NewKey(keyVersion)
+}
+
+func (svc *googleKeyService) keyVersion(v ...int) (*kmspb.CryptoKeyVersion, error) {
+	svc.RLock()
+	defer svc.RUnlock()
+
 	count := len(svc.keyVersions)
 	if count == 0 {
 		return nil, errors.New("key empty")
@@ -79,12 +92,7 @@ func (svc *googleKeyService) Key(v ...int) (Key, error) {
 		return nil, errors.New("key not found")
 	}
 
-	svc.RLock()
-	defer svc.RUnlock()
-
-	keyVersion := svc.keyVersions[ver]
-
-	return svc.NewKey(keyVersion)
+	return svc.keyVersions[ver], nil
 }
 
 func (svc *googleKeyService) Signature(data []byte, ver ...int) ([]byte, error) {

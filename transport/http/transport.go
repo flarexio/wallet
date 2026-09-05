@@ -111,12 +111,26 @@ func InitializeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 
 func FinalizeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		req, err := protocol.ParseCredentialRequestResponse(c.Request)
+		username := c.Param("user")
+		if username == "" {
+			err := errors.New("user is required")
+			c.Abort()
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
+
+		assertion, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {
 			c.Abort()
 			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
+		}
+
+		req := &wallet.FinalizeSignMessageRequest{
+			Subject:   username,
+			Assertion: assertion,
 		}
 
 		ctx := c.Request.Context()
@@ -202,12 +216,26 @@ func InitializeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFun
 
 func FinalizeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		req, err := protocol.ParseCredentialRequestResponse(c.Request)
+		username := c.Param("user")
+		if username == "" {
+			err := errors.New("user is required")
+			c.Abort()
+			c.Error(err)
+			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
+
+		assertion, err := protocol.ParseCredentialRequestResponse(c.Request)
 		if err != nil {
 			c.Abort()
 			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
 			return
+		}
+
+		req := &wallet.FinalizeSignTransactionRequest{
+			Subject:   username,
+			Assertion: assertion,
 		}
 
 		ctx := c.Request.Context()

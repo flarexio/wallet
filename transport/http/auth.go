@@ -26,13 +26,19 @@ type JWTAuth func(rule string, who ...Who) gin.HandlerFunc
 
 func JWTAuthorizator(policy policy.Policy) JWTAuth {
 	return func(rule string, who ...Who) gin.HandlerFunc {
-		rules := strings.Split(rule, ".")
-		domain := rules[0]
-		action := rules[1]
+		domain, action, ok := strings.Cut(rule, ".")
+		if !ok || domain == "" || action == "" || strings.Contains(action, ".") {
+			panic(`invalid authorization rule "` + rule + `": want "domain.action"`)
+		}
 
 		var flags byte
 		for _, w := range who {
 			flags = flags | byte(w)
+		}
+
+		// rbac.rego skips the ownership check entirely when who_flags is 0.
+		if flags == 0 {
+			panic(`authorization rule "` + rule + `" needs at least one Who: who_flags 0 skips the ownership check`)
 		}
 
 		return func(c *gin.Context) {

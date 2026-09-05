@@ -56,13 +56,14 @@ func (a *Account) Sign(data []byte) []byte {
 	return ed25519.Sign(a.PrivateKey, data)
 }
 
-func NewSignTransaction(id string, tx *solana.Transaction, versioned bool) (*Transaction, error) {
+func NewSignTransaction(subject string, id string, tx *solana.Transaction, versioned bool) (*Transaction, error) {
 	tid, err := ParseTransactionID(id)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Transaction{
+		Subject:       subject,
 		TransactionID: tid,
 		Transaction: &SignTransaction{
 			Transaction: tx,
@@ -71,13 +72,14 @@ func NewSignTransaction(id string, tx *solana.Transaction, versioned bool) (*Tra
 	}, nil
 }
 
-func NewSignMessageTransaction(id string, msg []byte) (*Transaction, error) {
+func NewSignMessageTransaction(subject string, id string, msg []byte) (*Transaction, error) {
 	tid, err := ParseTransactionID(id)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Transaction{
+		Subject:       subject,
 		TransactionID: tid,
 		Message: &SignMessage{
 			Message: msg,
@@ -101,8 +103,7 @@ func (id TransactionID) String() string {
 }
 
 func (id TransactionID) MarshalJSON() ([]byte, error) {
-	jsonStr := `"` + id.String() + `"`
-	return json.Marshal(jsonStr)
+	return json.Marshal(id.String())
 }
 
 func (id *TransactionID) UnmarshalJSON(data []byte) error {
@@ -121,6 +122,7 @@ func (id *TransactionID) UnmarshalJSON(data []byte) error {
 }
 
 type Transaction struct {
+	Subject       string           `json:"subject"`
 	TransactionID TransactionID    `json:"transaction_id"`
 	Transaction   *SignTransaction `json:"transaction"`
 	Message       *SignMessage     `json:"message"`
