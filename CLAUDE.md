@@ -10,7 +10,7 @@ Three deliverables live in one repo:
 
 | Component | Path | Ships as |
 |---|---|---|
-| Backend API (Go 1.24, Gin + go-kit) | repo root, `cmd/wallet` | `flarexio/wallet` Docker image |
+| Backend API (Go 1.25, Gin + go-kit) | repo root, `cmd/wallet` | `flarexio/wallet` Docker image |
 | Wallet PWA (Angular 18 + Material) | `app/` | `flarexio/wallet-app` Docker image (Caddy static server) |
 | dApp SDK (TypeScript) | `wallet-adapter/` | npm `@flarex/wallet-adapter` |
 
