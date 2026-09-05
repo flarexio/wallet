@@ -18,7 +18,7 @@ jobs:
           go-version: '1.24'
 
       - name: Build
-        run: go build cmd/wallet/main.go
+        run: go build ./...
 
       - name: Test
-        run: go test -v ./...
+        run: go test -race ./...
