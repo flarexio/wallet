@@ -35,14 +35,14 @@ npm run build      # tsc -> lib/, which IS committed
 
 `TestGoogleKeyService` skips itself unless `GOOGLE_APPLICATION_CREDENTIALS` is set — it hits real KMS. Tests read `config.example.yaml`, so changing that file breaks `conf` and `keys` tests.
 
-CI (`.github/workflows/build.yml`) only builds and tests the Go side. Tagging `v*` triggers `release.yml`, which builds both Docker images and pushes multi-arch manifests to Docker Hub.
+CI (`.github/workflows/build.yml`) only builds and tests the Go side, and runs `go test -race` — the session tests are concurrency regressions, so a change that needs `-race` off does not belong in them. Tagging `v*` triggers `release.yml`, which builds both Docker images and pushes multi-arch manifests to Docker Hub.
 
 ## Runtime layout
 
 The server reads everything from one directory — `--path` / `$WALLET_PATH`, default `$HOME/.flarex/wallet`, stored in the package-level `conf.Path`:
 
 - `config.yaml` — see `config.example.yaml`
-- `permissions.json` — OPA data document; `policy/data.json` in this repo is the template. The Rego module itself (`rbac.rego`) is embedded in `github.com/flarexio/core/policy`, not here.
+- `permissions.json` — OPA data document; `policy/data.json` in this repo is the template. **Only the data is per-project.** The rule module (`rbac.rego`) is `//go:embed`-ed into `github.com/flarexio/core/policy` and compiled in, so `NewRegoPolicy(ctx, path)` reads the data document at `path` and nothing else — rule logic cannot be changed from this repo, only guarded against in `transport/http/auth.go`.
 - `id.json` — Solana keypair, when the solana persistence driver is used
 - badger data dir, named by `persistence.badger.name`
 
@@ -80,7 +80,9 @@ Transaction UUIDs are **client-supplied**, so the parked record carries its owni
 
 ## Auth chain
 
-`transport/http/token.go` fetches an Ed25519 JWKS from `jwt.jwksURL` and refreshes every 5 minutes into a mutex-guarded cache. `transport/http/auth.go` then parses the bearer token and hands `{domain, action, who_flags, claims, object}` to the OPA policy. `JWTAuthorizator("wallet::accounts.get", http.Owner)` splits the rule on `.` — a rule string without a dot will panic at wiring time. `who` flags are a bitmask (`Owner|Group|Others|Admin|All`) mirrored in `policy/data.json`'s `who_enum`.
+`transport/http/token.go` fetches an Ed25519 JWKS from `jwt.jwksURL` and refreshes every 5 minutes into a mutex-guarded cache. `transport/http/auth.go` then parses the bearer token and hands `{domain, action, who_flags, claims, object}` to the OPA policy. `JWTAuthorizator("wallet::accounts.get", http.Owner)` splits the rule on `.` and `who` flags are a bitmask (`Owner|Group|Others|Admin|All`) mirrored in `policy/data.json`'s `who_enum`.
+
+Both arguments are validated at wiring time and **panic** rather than start a server with broken authorization: the rule must be exactly `domain.action`, and the flags must not come out zero. The second one matters because `rbac.rego` allows any role-bearing token through when `who_flags` is 0 — `authorized_users` is empty, so its `count(authorized_users) == 0` clause fires and nothing about `object` is checked. `policy.TestZeroWhoFlagsSkipsOwnership` pins that behaviour; if it ever starts failing, core changed the rule and the guard can be revisited.
 
 Three distinct actions exist in the `wallet::accounts` domain, so a role can be granted reads without signing rights:
 
