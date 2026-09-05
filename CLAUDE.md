@@ -43,6 +43,7 @@ The server reads everything from one directory — `--path` / `$WALLET_PATH`, de
 
 - `config.yaml` — see `config.example.yaml`
 - `permissions.json` — OPA data document; `policy/data.json` in this repo is the template. **Only the data is per-project.** The rule module (`rbac.rego`) is `//go:embed`-ed into `github.com/flarexio/core/policy` and compiled in, so `NewRegoPolicy(ctx, path)` reads the data document at `path` and nothing else — rule logic cannot be changed from this repo, only guarded against in `transport/http/auth.go`.
+- `audit.log` — hash-chained signature audit log, created on first start
 - `id.json` — Solana keypair, when the solana persistence driver is used
 - badger data dir, named by `persistence.badger.name`
 
@@ -61,14 +62,22 @@ The KMS master key never leaves Google. The account record persists `Salt` and `
 
 `service.go` exposes Initialize/Finalize pairs for both messages and transactions, and the HTTP layer maps them onto POST/PUT of the same URL:
 
-1. **POST** `/accounts/:user/{message,transaction}-signatures` → asks Hanko passkeys for a `CredentialAssertion`, *signs immediately anyway*, and parks the result in the repository under a transaction UUID with a 120s TTL.
-2. **PUT** same URL → verifies the assertion, reads the transaction ID out of the returned JWT's `trans` claim, and pops the parked signature (`RemoveTransaction` deletes on read).
+1. **POST** `/accounts/:user/{message,transaction}-signatures` → asks Hanko passkeys for a `CredentialAssertion` over `sha256(payload)` and parks the **unsigned** payload in the repository under a transaction UUID with a 120s TTL.
+2. **PUT** same URL → verifies the assertion, reads the transaction ID out of the returned JWT's `trans` claim, pops the parked payload (`RemoveTransaction` deletes on read), signs it, records an audit entry, and only then returns the signature.
 
-So the signature exists server-side before the user approves; the passkey gates *release*, not creation. Keep that invariant in mind when touching `CacheTransaction` / `RemoveTransaction`.
+**No signature exists until the passkey assertion has been verified.** The bytes signed at Finalize are the bytes the challenge was built from at Initialize, so the audit entry's `payload_hash` is provably what the user approved — for transactions that means hashing the transaction *before* signing it, since signing mutates it. Keep that ordering when touching `CacheTransaction` / `RemoveTransaction`.
 
 Transaction UUIDs are **client-supplied**, so the parked record carries its owning `Subject` and both sides of the cache are keyed by it (`tx:<subject>:<uuid>`). That is what stops one account from overwriting another's pending transaction, and `RemoveTransaction` re-checks `Subject` on read as a backstop. Anything that caches or pops a transaction must keep the subject in the key — dropping it silently reintroduces a cross-account collision.
 
-`SignMessageEndpoint` / `SignTransactionEndpoint` (the direct, non-passkey variants) exist in `endpoint.go` but are deliberately **not wired up** in `main.go`.
+`SignMessageEndpoint` / `SignTransactionEndpoint` (the direct, non-passkey variants) exist in `endpoint.go` but are deliberately **not wired up** in `main.go`. They bypass both the passkey and the audit log.
+
+## Audit log (`audit/`)
+
+Every released signature is recorded in a hash-chained append-only JSONL log at `$WALLET_PATH/audit.log`. Each entry carries the subject, action, transaction id, wallet address, KMS key version, `payload_hash`, and the credential ID / sign count / **origin** taken from the WebAuthn assertion — so a signature can be tied back to the specific passkey and the site the user approved it from.
+
+`service.record` **fails closed**: `svc.audit.Append` erroring means `ErrNotAudited` is returned and no signature is released. A signature that cannot be recorded must not exist as far as the caller is concerned.
+
+Entries link by `prev_hash`, so an edit or deletion breaks the chain from that point on. `audit.Verify` checks it, `NewFileLog` refuses to reopen a log that does not verify, and `fileLog.Append` `Sync()`s before returning. Anchoring the chain head on-chain so users can verify it independently is not implemented.
 
 ## Cross-window session channel
 
