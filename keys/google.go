@@ -61,6 +61,23 @@ type googleKeyService struct {
 }
 
 func (svc *googleKeyService) Key(v ...int) (Key, error) {
+	keyVersion, err := svc.keyVersion(v...)
+	if err != nil {
+		return nil, err
+	}
+
+	// NewKey makes a GetPublicKey round trip, so it stays outside the lock:
+	// holding it across the network would park any future writer behind
+	// every in-flight KMS call.
+	return svc.NewKey(keyVersion)
+}
+
+// keyVersion resolves a 1-indexed version, or the latest when none is given.
+// Every read of keyVersions belongs in here, under the lock.
+func (svc *googleKeyService) keyVersion(v ...int) (*kmspb.CryptoKeyVersion, error) {
+	svc.RLock()
+	defer svc.RUnlock()
+
 	count := len(svc.keyVersions)
 	if count == 0 {
 		return nil, errors.New("key empty")
@@ -79,12 +96,7 @@ func (svc *googleKeyService) Key(v ...int) (Key, error) {
 		return nil, errors.New("key not found")
 	}
 
-	svc.RLock()
-	defer svc.RUnlock()
-
-	keyVersion := svc.keyVersions[ver]
-
-	return svc.NewKey(keyVersion)
+	return svc.keyVersions[ver], nil
 }
 
 func (svc *googleKeyService) Signature(data []byte, ver ...int) ([]byte, error) {

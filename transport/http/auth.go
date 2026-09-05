@@ -26,9 +26,13 @@ type JWTAuth func(rule string, who ...Who) gin.HandlerFunc
 
 func JWTAuthorizator(policy policy.Policy) JWTAuth {
 	return func(rule string, who ...Who) gin.HandlerFunc {
-		rules := strings.Split(rule, ".")
-		domain := rules[0]
-		action := rules[1]
+		// Rules are wired up as literals in main.go, so a malformed one is a
+		// programming error: fail at registration with a message that says so
+		// rather than an index-out-of-range from the split.
+		domain, action, ok := strings.Cut(rule, ".")
+		if !ok || domain == "" || action == "" || strings.Contains(action, ".") {
+			panic(`invalid authorization rule "` + rule + `": want "domain.action"`)
+		}
 
 		var flags byte
 		for _, w := range who {
