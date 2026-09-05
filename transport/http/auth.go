@@ -26,9 +26,6 @@ type JWTAuth func(rule string, who ...Who) gin.HandlerFunc
 
 func JWTAuthorizator(policy policy.Policy) JWTAuth {
 	return func(rule string, who ...Who) gin.HandlerFunc {
-		// Rules are wired up as literals in main.go, so a malformed one is a
-		// programming error: fail at registration with a message that says so
-		// rather than an index-out-of-range from the split.
 		domain, action, ok := strings.Cut(rule, ".")
 		if !ok || domain == "" || action == "" || strings.Contains(action, ".") {
 			panic(`invalid authorization rule "` + rule + `": want "domain.action"`)
@@ -39,10 +36,7 @@ func JWTAuthorizator(policy policy.Policy) JWTAuth {
 			flags = flags | byte(w)
 		}
 
-		// who_flags of 0 leaves rbac.rego's authorized_users set empty, and its
-		// "count(authorized_users) == 0" clause then allows any token carrying a
-		// permitted role through with no ownership check at all. No wallet route
-		// wants that, so refuse to wire one up rather than silently downgrade.
+		// rbac.rego skips the ownership check entirely when who_flags is 0.
 		if flags == 0 {
 			panic(`authorization rule "` + rule + `" needs at least one Who: who_flags 0 skips the ownership check`)
 		}

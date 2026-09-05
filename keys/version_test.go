@@ -61,8 +61,7 @@ func TestKeyVersionEmpty(t *testing.T) {
 	assert.EqualError(err, "key empty")
 }
 
-// keyVersions is read from every request goroutine, so the whole read has to
-// sit under the lock -- half of it used to be outside.
+// keyVersions is read from every request goroutine.
 func TestKeyVersionConcurrentReads(t *testing.T) {
 	assert := assert.New(t)
 

@@ -192,7 +192,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
-	case err := <-serverErr: // the listener never came up, or died
+	case err := <-serverErr:
 		return err
 
 	case sign := <-quit: // Wait for a termination signal

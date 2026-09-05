@@ -67,8 +67,7 @@ func (repo *badgerAccountRepository) Find(subject string) (*account.Account, err
 	return a, nil
 }
 
-// Transaction ids come from the client, so they are namespaced by subject:
-// one account cannot overwrite another's pending transaction.
+// Transaction ids come from the client, so they are namespaced by subject.
 func transactionKey(subject string, id account.TransactionID) []byte {
 	return []byte("tx:" + subject + ":" + id.String())
 }

@@ -19,9 +19,7 @@ func claims(sub string, roles ...string) map[string]any {
 	}
 }
 
-// data.json is the template for the permissions.json the server loads at
-// runtime, so it has to stay in step with the rule strings wired up in
-// cmd/wallet/main.go.
+// data.json has to stay in step with the rule strings wired up in main.go.
 func TestAccountPermissions(t *testing.T) {
 	assert := assert.New(t)
 
@@ -69,8 +67,7 @@ func TestAccountPermissions(t *testing.T) {
 	}
 }
 
-// Signing is a separate action from reading, so a role scoped to reads alone
-// cannot sign. This is the property the shared "get" rule used to lack.
+// A role scoped to reads alone cannot sign.
 func TestReadOnlyRoleCannotSign(t *testing.T) {
 	assert := assert.New(t)
 
@@ -98,18 +95,9 @@ func TestReadOnlyRoleCannotSign(t *testing.T) {
 	assert.False(eval("sign_transaction"))
 }
 
-// rbac.rego (embedded in flarexio/core, so it cannot be changed from this
-// repo) allows any role-bearing token when who_flags is 0:
-//
-//	allow if {
-//		is_authorized
-//		count(authorized_users) == 0
-//	}
-//
-// Nothing about the object is checked, so bob's token reaches alice's wallet.
-// transport/http.JWTAuthorizator refuses to wire a route up that way; this
-// test records why that guard exists and will fail if core ever changes the
-// rule, at which point the guard can be revisited.
+// rbac.rego lives in flarexio/core and allows any role-bearing token when
+// who_flags is 0, so JWTAuthorizator refuses to wire a route up that way. If
+// this starts failing, core changed the rule and that guard can be revisited.
 func TestZeroWhoFlagsSkipsOwnership(t *testing.T) {
 	assert := assert.New(t)
 

@@ -68,8 +68,6 @@ const (
 	sessionTTL     = 120 * time.Second
 	transactionTTL = 120 * time.Second
 
-	// sessionIndexLen is how many leading characters of a session id bucket it
-	// in the session map.
 	sessionIndexLen = 2
 )
 
@@ -95,11 +93,6 @@ type Session struct {
 	once   sync.Once
 }
 
-// finish performs the one and only delivery on the session channel: it hands
-// over data (a nil payload signals a timeout) and then closes. discard closes
-// without delivering anything. Both run under the same sync.Once, so a send can
-// never race a close, and the channel is buffered so neither call can block --
-// that is what keeps AckSession from stalling while it holds svc's mutex.
 func (s *Session) finish(data []byte) bool {
 	var done bool
 
@@ -379,8 +372,6 @@ func (svc *service) sessionTimeout(ctx context.Context, session *Session) {
 	svc.removeSession(session)
 }
 
-// removeSession unlinks a session from the index. It never touches the
-// session channel, so it is safe to call from any goroutine.
 func (svc *service) removeSession(session *Session) {
 	index, err := sessionIndex(session.sig)
 	if err != nil {
@@ -407,8 +398,6 @@ func (svc *service) removeSession(session *Session) {
 	}
 }
 
-// lookupSession returns the live session for an id. The caller must not hold
-// svc's mutex.
 func (svc *service) lookupSession(session string) (*Session, error) {
 	index, err := sessionIndex(session)
 	if err != nil {
@@ -447,9 +436,7 @@ func (svc *service) AckSession(ctx context.Context, session string, data []byte)
 		return err
 	}
 
-	// Deliver outside the mutex: finish is non-blocking, but keeping channel
-	// work off the lock is what stops one stalled stream from freezing every
-	// other session operation.
+	// Deliver outside the mutex: a stalled stream must not freeze other sessions.
 	if !s.finish(data) {
 		return ErrSessionClosed
 	}

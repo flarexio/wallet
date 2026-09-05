@@ -36,8 +36,7 @@ func cachedMessage(t *testing.T, subject string, id string, msg string) *account
 	return tx
 }
 
-// Transaction ids are supplied by the client. One account reusing another's id
-// must not clobber the pending transaction that id refers to.
+// Transaction ids come from the client, so one account must not clobber another's.
 func TestCacheTransactionIsolatesSubjects(t *testing.T) {
 	assert := assert.New(t)
 
@@ -56,8 +55,7 @@ func TestCacheTransactionIsolatesSubjects(t *testing.T) {
 	assert.Equal([]byte("alice-message"), got.Message.Message)
 }
 
-// Even with a matching id, finalizing against another account's transaction
-// must fail rather than release its signature.
+// A matching id must not release another account's signature.
 func TestRemoveTransactionRejectsOtherSubject(t *testing.T) {
 	assert := assert.New(t)
 
@@ -69,7 +67,6 @@ func TestRemoveTransactionRejectsOtherSubject(t *testing.T) {
 	_, err := repo.RemoveTransaction("mallory", id2tid(t, id))
 	assert.ErrorIs(err, account.ErrTransactionNotFound)
 
-	// Alice's transaction survives the failed attempt.
 	got, err := repo.RemoveTransaction("alice", id2tid(t, id))
 	assert.NoError(err)
 	assert.Equal([]byte("alice-message"), got.Message.Message)
@@ -90,13 +87,11 @@ func TestRemoveTransactionRoundTrip(t *testing.T) {
 
 	assert.Equal(id, got.TransactionID.String())
 
-	// Removal is destructive: the same transaction cannot be finalized twice.
 	_, err = repo.RemoveTransaction("alice", id2tid(t, id))
 	assert.ErrorIs(err, account.ErrTransactionNotFound)
 }
 
-// TransactionID used to marshal a quoted string inside a JSON string, which
-// only round-tripped because uuid.Parse tolerates the stray leading quote.
+// transaction_id must be a plain UUID string on the wire.
 func TestTransactionIDWireFormat(t *testing.T) {
 	assert := assert.New(t)
 

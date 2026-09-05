@@ -18,9 +18,7 @@ func newSessionService() *service {
 	}
 }
 
-// A stream that has gone away must not wedge the service: AckSession used to
-// block sending on an unbuffered channel while holding svc's mutex, which
-// froze every other session operation until restart.
+// A stream that has gone away must not wedge every other session.
 func TestAckSessionDoesNotBlockOtherSessions(t *testing.T) {
 	assert := assert.New(t)
 
@@ -64,8 +62,7 @@ func TestAckSessionDoesNotBlockOtherSessions(t *testing.T) {
 	}
 }
 
-// The ack path and the timeout path both terminate the channel, and used to be
-// able to interleave into a "send on closed channel" panic.
+// Ack and timeout both terminate the channel; interleaving them must not panic.
 func TestAckSessionRacingTimeout(t *testing.T) {
 	assert := assert.New(t)
 
@@ -85,7 +82,7 @@ func TestAckSessionRacingTimeout(t *testing.T) {
 		go svc.AckSession(context.Background(), session, []byte("data"))
 		go cancel()
 
-		<-ch // drains whichever outcome wins, then observes the close
+		<-ch // whichever outcome wins, then the close
 	}
 }
 
@@ -112,16 +109,14 @@ func TestAckSessionDeliversToStream(t *testing.T) {
 	_, ok := <-ch
 	assert.False(ok, "channel should be closed after delivery")
 
-	// A second ack must never deliver again. Whether it reports "closed" or
-	// "not found" depends on whether unindexing has caught up yet.
+	// Which error comes back depends on whether unindexing has caught up.
 	err = svc.AckSession(ctx, session, []byte("again"))
 	assert.Error(err)
 	assert.True(err == ErrSessionClosed || err == ErrSessionNotFound,
 		"unexpected error for repeated ack: %v", err)
 }
 
-// Session ids index the map by their first two characters; anything shorter
-// used to panic with a slice-bounds error on an unauthenticated route.
+// Session ids index the map by their first two characters; shorter must not panic.
 func TestShortSessionIDIsNotFound(t *testing.T) {
 	assert := assert.New(t)
 
@@ -160,8 +155,7 @@ func TestCancelledSessionClosesStream(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond, "cancelled session should be unindexed")
 }
 
-// Session ids are deterministic Ed25519 signatures, so the same payload always
-// collides. Documents the current contract rather than endorsing it.
+// Session ids are deterministic signatures, so the same payload always collides.
 func TestDuplicatePayloadIsRejected(t *testing.T) {
 	assert := assert.New(t)
 
@@ -177,7 +171,6 @@ func TestDuplicatePayloadIsRejected(t *testing.T) {
 	_, _, err = svc.CreateSession(ctx, []byte("same"))
 	assert.ErrorIs(err, ErrSessionExists)
 
-	// The rejected attempt must not have disturbed the live session.
 	data, err := svc.SessionData(ctx, first)
 	assert.NoError(err)
 	assert.Equal([]byte("same"), data)

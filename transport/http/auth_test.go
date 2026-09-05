@@ -6,9 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Rule strings are wired up as literals in cmd/wallet/main.go. A malformed one
-// used to fail with "index out of range [1] with length 1", which says nothing
-// about the actual mistake.
+// Rules are wired up as literals in main.go, so a malformed one must not start.
 func TestJWTAuthorizatorRejectsMalformedRule(t *testing.T) {
 	assert := assert.New(t)
 
@@ -47,9 +45,7 @@ func TestJWTAuthorizatorAcceptsWiredRules(t *testing.T) {
 	}
 }
 
-// who_flags of 0 makes rbac.rego skip the ownership check entirely (see
-// TestZeroWhoFlagsSkipsOwnership in the policy package), so wiring a route
-// without a Who has to fail at registration rather than at runtime.
+// who_flags 0 skips the ownership check; see policy.TestZeroWhoFlagsSkipsOwnership.
 func TestJWTAuthorizatorRequiresWho(t *testing.T) {
 	assert := assert.New(t)
 

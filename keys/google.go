@@ -66,14 +66,10 @@ func (svc *googleKeyService) Key(v ...int) (Key, error) {
 		return nil, err
 	}
 
-	// NewKey makes a GetPublicKey round trip, so it stays outside the lock:
-	// holding it across the network would park any future writer behind
-	// every in-flight KMS call.
+	// NewKey makes a network call, so it stays outside the lock.
 	return svc.NewKey(keyVersion)
 }
 
-// keyVersion resolves a 1-indexed version, or the latest when none is given.
-// Every read of keyVersions belongs in here, under the lock.
 func (svc *googleKeyService) keyVersion(v ...int) (*kmspb.CryptoKeyVersion, error) {
 	svc.RLock()
 	defer svc.RUnlock()

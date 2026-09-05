@@ -67,9 +67,6 @@ func InitializeSignMessageEndpoint(svc Service) endpoint.Endpoint {
 	}
 }
 
-// FinalizeSignMessageRequest pairs the passkey assertion with the account it
-// is being finalized against, so the cached signature can be checked to belong
-// to that account before it is released.
 type FinalizeSignMessageRequest struct {
 	Subject   string
 	Assertion *protocol.ParsedCredentialAssertionData
