@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 
 	"github.com/flarexio/identity/passkeys"
 	"github.com/flarexio/wallet/account"
+	"github.com/flarexio/wallet/audit"
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/keys"
 )
@@ -46,10 +49,17 @@ func NewService(accounts account.Repository, passkeys passkeys.Service, cfg conf
 	sessionKey := cfg.Keys.Session.Key
 	privkey := ed25519.NewKeyFromSeed(sessionKey[:])
 
+	auditLog, err := audit.NewFileLog(filepath.Join(conf.Path, auditLogName))
+	if err != nil {
+		keys.Close()
+		return nil, err
+	}
+
 	return &service{
 		accounts: accounts,
 		keys:     keys,
 		passkeys: passkeys,
+		audit:    auditLog,
 		privkey:  privkey,
 		sessions: make(map[string][]*Session),
 	}, nil
@@ -59,6 +69,7 @@ type service struct {
 	accounts account.Repository
 	keys     keys.Service
 	passkeys passkeys.Service
+	audit    audit.Log
 	privkey  ed25519.PrivateKey
 	sessions map[string][]*Session
 	sync.Mutex
@@ -69,9 +80,13 @@ const (
 	transactionTTL = 120 * time.Second
 
 	sessionIndexLen = 2
+
+	auditLogName = "audit.log"
 )
 
 var (
+	ErrNotAudited = errors.New("signature withheld: audit entry could not be recorded")
+
 	ErrSessionNotFound = errors.New("session not found")
 	ErrSessionExists   = errors.New("session already exists")
 	ErrSessionClosed   = errors.New("session already closed")
@@ -167,17 +182,10 @@ func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*p
 		return nil, "", err
 	}
 
-	sig, err := svc.SignMessage(req.Subject, req.Message)
-	if err != nil {
-		return nil, "", err
-	}
-
 	t, err := account.NewSignMessageTransaction(req.Subject, req.TransactionID, req.Message)
 	if err != nil {
 		return nil, "", err
 	}
-
-	t.Message.Signature = sig
 
 	if err := svc.accounts.CacheTransaction(t, transactionTTL); err != nil {
 		return nil, "", err
@@ -189,27 +197,7 @@ func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*p
 func (svc *service) FinalizeSignMessage(subject string, req *protocol.ParsedCredentialAssertionData) (solana.Signature, error) {
 	var sig solana.Signature
 
-	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
-	if err != nil {
-		return sig, err
-	}
-
-	token, err := svc.passkeys.VerifyToken(tokenStr)
-	if err != nil {
-		return sig, err
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return sig, errors.New("invalid type")
-	}
-
-	tid, ok := claims["trans"].(string)
-	if !ok {
-		return sig, errors.New("invalid type")
-	}
-
-	id, err := account.ParseTransactionID(tid)
+	id, err := svc.approvedTransactionID(req)
 	if err != nil {
 		return sig, err
 	}
@@ -219,7 +207,23 @@ func (svc *service) FinalizeSignMessage(subject string, req *protocol.ParsedCred
 		return sig, err
 	}
 
-	sig = t.Message.Signature
+	if t.Message == nil {
+		return sig, account.ErrTransactionNotFound
+	}
+
+	a, err := svc.accounts.Find(subject)
+	if err != nil {
+		return sig, err
+	}
+
+	sig, err = solana.PrivateKey(a.PrivateKey).Sign(t.Message.Message)
+	if err != nil {
+		return sig, err
+	}
+
+	if err := svc.record(a, audit.SignMessage, id, t.Message.Message, req); err != nil {
+		return solana.Signature{}, err
+	}
 
 	return sig, nil
 }
@@ -259,17 +263,10 @@ func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequ
 		return nil, "", err
 	}
 
-	sigs, err := svc.SignTransaction(req.Subject, req.Transaction)
-	if err != nil {
-		return nil, "", err
-	}
-
 	t, err := account.NewSignTransaction(req.Subject, req.TransactionID, req.Transaction, req.Versioned)
 	if err != nil {
 		return nil, "", err
 	}
-
-	t.Transaction.Signatures = sigs
 
 	if err := svc.accounts.CacheTransaction(t, transactionTTL); err != nil {
 		return nil, "", err
@@ -279,27 +276,7 @@ func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequ
 }
 
 func (svc *service) FinalizeSignTransaction(subject string, req *protocol.ParsedCredentialAssertionData) (*solana.Transaction, bool, error) {
-	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
-	if err != nil {
-		return nil, false, err
-	}
-
-	token, err := svc.passkeys.VerifyToken(tokenStr)
-	if err != nil {
-		return nil, false, err
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, false, errors.New("invalid type")
-	}
-
-	tid, ok := claims["trans"].(string)
-	if !ok {
-		return nil, false, errors.New("invalid type")
-	}
-
-	id, err := account.ParseTransactionID(tid)
+	id, err := svc.approvedTransactionID(req)
 	if err != nil {
 		return nil, false, err
 	}
@@ -309,10 +286,99 @@ func (svc *service) FinalizeSignTransaction(subject string, req *protocol.Parsed
 		return nil, false, err
 	}
 
+	if t.Transaction == nil {
+		return nil, false, account.ErrTransactionNotFound
+	}
+
 	tx := t.Transaction.Transaction
 	versioned := t.Transaction.Versioned
 
+	// Hash the unsigned transaction: those are the bytes InitializeSignTransaction
+	// put in front of the passkey, so the audit entry records what was approved.
+	approved, err := tx.MarshalBinary()
+	if err != nil {
+		return nil, false, err
+	}
+
+	a, err := svc.accounts.Find(subject)
+	if err != nil {
+		return nil, false, err
+	}
+
+	getter := func(key solana.PublicKey) *solana.PrivateKey {
+		if key.Equals(a.Wallet()) {
+			privkey := solana.PrivateKey(a.PrivateKey)
+			return &privkey
+		}
+
+		return nil
+	}
+
+	if _, err := tx.Sign(getter); err != nil {
+		return nil, false, err
+	}
+
+	if err := svc.record(a, audit.SignTransaction, id, approved, req); err != nil {
+		return nil, false, err
+	}
+
 	return tx, versioned, nil
+}
+
+// approvedTransactionID verifies the passkey assertion and returns the id of
+// the transaction the user approved with it.
+func (svc *service) approvedTransactionID(req *protocol.ParsedCredentialAssertionData) (account.TransactionID, error) {
+	tokenStr, err := svc.passkeys.FinalizeTransaction(req)
+	if err != nil {
+		return account.TransactionID{}, err
+	}
+
+	token, err := svc.passkeys.VerifyToken(tokenStr)
+	if err != nil {
+		return account.TransactionID{}, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return account.TransactionID{}, errors.New("invalid type")
+	}
+
+	tid, ok := claims["trans"].(string)
+	if !ok {
+		return account.TransactionID{}, errors.New("invalid type")
+	}
+
+	return account.ParseTransactionID(tid)
+}
+
+// record writes the audit entry for a signature that has just been produced.
+// A signature is only released once its entry is durably recorded, so a failure
+// here fails the whole request.
+func (svc *service) record(a *account.Account, action audit.Action, id account.TransactionID,
+	approved []byte, req *protocol.ParsedCredentialAssertionData) error {
+
+	sum := sha256.Sum256(approved)
+
+	e := &audit.Entry{
+		Subject:       a.Subject,
+		Action:        action,
+		TransactionID: id.String(),
+		Wallet:        a.Wallet().String(),
+		KeyVersion:    a.KeyVersion,
+		PayloadHash:   hex.EncodeToString(sum[:]),
+	}
+
+	if req != nil {
+		e.CredentialID = req.ID
+		e.SignCount = req.Response.AuthenticatorData.Counter
+		e.Origin = req.Response.CollectedClientData.Origin
+	}
+
+	if _, err := svc.audit.Append(e); err != nil {
+		return errors.Join(ErrNotAudited, err)
+	}
+
+	return nil
 }
 
 func (svc *service) CreateSession(ctx context.Context, data []byte) (string, <-chan []byte, error) {
@@ -447,5 +513,5 @@ func (svc *service) AckSession(ctx context.Context, session string, data []byte)
 }
 
 func (svc *service) Close() error {
-	return svc.keys.Close()
+	return errors.Join(svc.audit.Close(), svc.keys.Close())
 }
