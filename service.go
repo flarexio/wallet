@@ -61,6 +61,7 @@ func NewService(accounts account.Repository, passkeys passkeys.Service, cfg conf
 		passkeys: passkeys,
 		audit:    auditLog,
 		privkey:  privkey,
+		keyCache: newKeyCache(keyCacheTTL, keyCacheEntries),
 		sessions: make(map[string][]*Session),
 	}, nil
 }
@@ -71,6 +72,7 @@ type service struct {
 	passkeys passkeys.Service
 	audit    audit.Log
 	privkey  ed25519.PrivateKey
+	keyCache *keyCache
 	sessions map[string][]*Session
 	sync.Mutex
 }
@@ -85,7 +87,8 @@ const (
 )
 
 var (
-	ErrNotAudited = errors.New("signature withheld: audit entry could not be recorded")
+	ErrNotAudited  = errors.New("signature withheld: audit entry could not be recorded")
+	ErrKeyMismatch = errors.New("derived key does not match the account's public key")
 
 	ErrSessionNotFound = errors.New("session not found")
 	ErrSessionExists   = errors.New("session already exists")
@@ -126,48 +129,99 @@ func (s *Session) discard() {
 	})
 }
 
+// findOrCreate returns the account for subject, creating it on first access.
 func (svc *service) findOrCreate(subject string) (*account.Account, error) {
 	// TODO: find wallet from solana
+
+	a, err := svc.accounts.Find(subject)
+	if err == nil {
+		return a, nil
+	}
+
+	if !errors.Is(err, account.ErrAccountNotFound) {
+		return nil, err
+	}
 
 	key, err := svc.keys.Key()
 	if err != nil {
 		return nil, err
 	}
 
-	return account.NewAccount(subject, key)
+	a, privkey, err := account.NewAccount(subject, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.accounts.Save(a); err != nil {
+		return nil, err
+	}
+
+	svc.keyCache.put(subject, privkey)
+
+	return a, nil
+}
+
+// privateKey re-derives an account's key, or takes it from the cache. The
+// derived public key is checked against the stored one, so pointing at the
+// wrong KMS version fails loudly instead of signing for the wrong wallet.
+func (svc *service) privateKey(a *account.Account) (ed25519.PrivateKey, error) {
+	if privkey, ok := svc.keyCache.get(a.Subject); ok {
+		return privkey, nil
+	}
+
+	key, err := svc.keys.Key(a.KeyVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	privkey, err := account.Derive(a.Subject, a.Salt, key)
+	if err != nil {
+		return nil, err
+	}
+
+	pub, ok := privkey.Public().(ed25519.PublicKey)
+	if !ok || !pub.Equal(a.PublicKey) {
+		return nil, ErrKeyMismatch
+	}
+
+	svc.keyCache.put(a.Subject, privkey)
+
+	return privkey, nil
+}
+
+// signer returns an existing account together with its key. It never creates
+// an account: signing for a wallet the caller has never seen is not something
+// a passkey assertion can have approved.
+func (svc *service) signer(subject string) (*account.Account, ed25519.PrivateKey, error) {
+	a, err := svc.accounts.Find(subject)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	privkey, err := svc.privateKey(a)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return a, privkey, nil
 }
 
 func (svc *service) Wallet(subject string) (solana.PublicKey, error) {
-	a, err := svc.accounts.Find(subject)
+	a, err := svc.findOrCreate(subject)
 	if err != nil {
-		if !errors.Is(err, account.ErrAccountNotFound) {
-			return solana.PublicKey{}, err
-		}
-
-		newAccount, err := svc.findOrCreate(subject)
-		if err != nil {
-			return solana.PublicKey{}, err
-		}
-
-		if err := svc.accounts.Save(newAccount); err != nil {
-			return solana.PublicKey{}, err
-		}
-
-		a = newAccount
+		return solana.PublicKey{}, err
 	}
 
 	return a.Wallet(), nil
 }
 
 func (svc *service) SignMessage(subject string, message []byte) (solana.Signature, error) {
-	a, err := svc.accounts.Find(subject)
+	_, privkey, err := svc.signer(subject)
 	if err != nil {
 		return solana.Signature{}, err
 	}
 
-	privkey := solana.PrivateKey(a.PrivateKey)
-
-	return privkey.Sign(message)
+	return solana.PrivateKey(privkey).Sign(message)
 }
 
 func (svc *service) InitializeSignMessage(req *InitializeSignMessageRequest) (*protocol.CredentialAssertion, string, error) {
@@ -211,12 +265,12 @@ func (svc *service) FinalizeSignMessage(subject string, req *protocol.ParsedCred
 		return sig, account.ErrTransactionNotFound
 	}
 
-	a, err := svc.accounts.Find(subject)
+	a, privkey, err := svc.signer(subject)
 	if err != nil {
 		return sig, err
 	}
 
-	sig, err = solana.PrivateKey(a.PrivateKey).Sign(t.Message.Message)
+	sig, err = solana.PrivateKey(privkey).Sign(t.Message.Message)
 	if err != nil {
 		return sig, err
 	}
@@ -229,21 +283,23 @@ func (svc *service) FinalizeSignMessage(subject string, req *protocol.ParsedCred
 }
 
 func (svc *service) SignTransaction(subject string, transaction *solana.Transaction) ([]solana.Signature, error) {
-	a, err := svc.accounts.Find(subject)
+	a, privkey, err := svc.signer(subject)
 	if err != nil {
 		return nil, err
 	}
 
-	getter := func(key solana.PublicKey) *solana.PrivateKey {
+	return transaction.Sign(walletKey(a, privkey))
+}
+
+func walletKey(a *account.Account, privkey ed25519.PrivateKey) func(solana.PublicKey) *solana.PrivateKey {
+	return func(key solana.PublicKey) *solana.PrivateKey {
 		if key.Equals(a.Wallet()) {
-			privkey := solana.PrivateKey(a.PrivateKey)
-			return &privkey
+			signer := solana.PrivateKey(privkey)
+			return &signer
 		}
 
 		return nil
 	}
-
-	return transaction.Sign(getter)
 }
 
 func (svc *service) InitializeSignTransaction(req *InitializeSignTransactionRequest) (*protocol.CredentialAssertion, string, error) {
@@ -300,21 +356,12 @@ func (svc *service) FinalizeSignTransaction(subject string, req *protocol.Parsed
 		return nil, false, err
 	}
 
-	a, err := svc.accounts.Find(subject)
+	a, privkey, err := svc.signer(subject)
 	if err != nil {
 		return nil, false, err
 	}
 
-	getter := func(key solana.PublicKey) *solana.PrivateKey {
-		if key.Equals(a.Wallet()) {
-			privkey := solana.PrivateKey(a.PrivateKey)
-			return &privkey
-		}
-
-		return nil
-	}
-
-	if _, err := tx.Sign(getter); err != nil {
+	if _, err := tx.Sign(walletKey(a, privkey)); err != nil {
 		return nil, false, err
 	}
 

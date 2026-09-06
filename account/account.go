@@ -2,6 +2,8 @@ package account
 
 import (
 	"crypto/ed25519"
+	"crypto/hkdf"
+	"crypto/sha256"
 	"encoding/json"
 	"time"
 
@@ -12,48 +14,64 @@ import (
 	"github.com/flarexio/wallet/keys"
 )
 
-func NewAccount(subject string, key keys.Key) (*Account, error) {
-	salt := uuid.New().String()
-	data := []byte(subject + salt)
+// derivationInfo domain-separates the account key from anything else derived
+// from the same KMS key. Changing it changes every wallet address.
+const derivationInfo = "flarex-wallet-account-v1"
 
-	seed, err := key.Signature(data)
+func NewAccount(subject string, key keys.Key) (*Account, ed25519.PrivateKey, error) {
+	salt := uuid.New().String()
+
+	privkey, err := Derive(subject, salt, key)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	privkey := ed25519.NewKeyFromSeed(seed[:ed25519.SeedSize])
-
-	return &Account{
+	a := &Account{
 		Subject:    subject,
 		Salt:       salt,
 		KeyVersion: key.Version(),
-		PrivateKey: privkey,
+		PublicKey:  privkey.Public().(ed25519.PublicKey),
 		Model: model.Model{
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
-	}, nil
+	}
+
+	return a, privkey, nil
 }
 
+// Derive rebuilds an account key from the KMS key and the account's salt.
+//
+// The KMS signature goes through HKDF rather than being used as the seed
+// directly. The first 32 bytes of an ed25519 signature are R, a value the
+// signature scheme publishes; seeding from it would make any exposure of a
+// KMS signature an exposure of the account key.
+func Derive(subject string, salt string, key keys.Key) (ed25519.PrivateKey, error) {
+	sig, err := key.Signature([]byte(subject + salt))
+	if err != nil {
+		return nil, err
+	}
+
+	seed, err := hkdf.Key(sha256.New, sig, []byte(salt), derivationInfo+"|"+subject, ed25519.SeedSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return ed25519.NewKeyFromSeed(seed), nil
+}
+
+// Account is the persisted record. It never carries private key material: the
+// key is derived on demand from the KMS key plus Salt.
 type Account struct {
 	Subject    string
 	Salt       string
 	KeyVersion int
-	PrivateKey ed25519.PrivateKey
+	PublicKey  ed25519.PublicKey
 	model.Model
 }
 
 func (a *Account) Wallet() solana.PublicKey {
-	pub, ok := a.PrivateKey.Public().(ed25519.PublicKey)
-	if !ok {
-		panic("invalid private key")
-	}
-
-	return solana.PublicKeyFromBytes(pub)
-}
-
-func (a *Account) Sign(data []byte) []byte {
-	return ed25519.Sign(a.PrivateKey, data)
+	return solana.PublicKeyFromBytes(a.PublicKey)
 }
 
 func NewSignTransaction(subject string, id string, tx *solana.Transaction, versioned bool) (*Transaction, error) {
@@ -129,21 +147,18 @@ type Transaction struct {
 }
 
 type SignMessage struct {
-	Message   []byte
-	Signature solana.Signature
+	Message []byte
 }
 
 type SignTransaction struct {
 	Transaction *solana.Transaction
 	Versioned   bool
-	Signatures  []solana.Signature
 }
 
 func (tx *SignTransaction) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Transaction []byte             `json:"transaction"`
-		Versioned   bool               `json:"versioned"`
-		Signatures  []solana.Signature `json:"signatures"`
+		Transaction []byte `json:"transaction"`
+		Versioned   bool   `json:"versioned"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -157,7 +172,6 @@ func (tx *SignTransaction) UnmarshalJSON(data []byte) error {
 
 	tx.Transaction = transaction
 	tx.Versioned = raw.Versioned
-	tx.Signatures = raw.Signatures
 
 	return nil
 }
@@ -169,12 +183,10 @@ func (tx *SignTransaction) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(struct {
-		Transaction []byte             `json:"transaction"`
-		Versioned   bool               `json:"versioned"`
-		Signatures  []solana.Signature `json:"signatures"`
+		Transaction []byte `json:"transaction"`
+		Versioned   bool   `json:"versioned"`
 	}{
 		Transaction: bs,
 		Versioned:   tx.Versioned,
-		Signatures:  tx.Signatures,
 	})
 }

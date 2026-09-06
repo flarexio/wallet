@@ -52,11 +52,20 @@ The server reads everything from one directory — `--path` / `$WALLET_PATH`, de
 ## Key derivation (`account/account.go`)
 
 ```
-subject + random UUID salt → KMS ed25519 Signature() → first 32 bytes as seed
-                           → ed25519 private key → Solana address
+subject + random UUID salt → KMS ed25519 Signature()
+                           → HKDF-SHA256(salt, "flarex-wallet-account-v1|"+subject)
+                           → ed25519 seed → private key → Solana address
 ```
 
-The KMS master key never leaves Google. The account record persists `Salt` and `KeyVersion` alongside the derived key, so an account is reproducible from the KMS key. `keys.Service.Key(ver...)` is 1-indexed against KMS crypto key versions; omitting the version means "latest".
+The KMS master key never leaves Google. **The account record persists only `Subject`, `Salt`, `KeyVersion` and `PublicKey` — never the private key**, which is derived on demand. A stolen store yields salts, which are useless without KMS; KMS access alone is useless without the salts.
+
+HKDF is load-bearing, not decoration: the first 32 bytes of an ed25519 signature are `R`, a value the scheme publishes, so seeding from them directly would make any exposure of a KMS signature an exposure of the account key. `derivationInfo` is part of the input — changing it changes every wallet address.
+
+`service.privateKey` re-derives through a `keyCache` (LRU, 5-minute TTL, 4096 entries), so a burst of signing costs one KMS call rather than one per request. Cached keys are **not** zeroed on eviction: a caller may still hold the slice. Every derivation is checked against the stored `PublicKey` and fails with `ErrKeyMismatch` rather than signing for the wrong wallet.
+
+`keys.Service.Key(ver...)` resolves by the **KMS version number parsed out of the resource name**, not by position in the list — accounts persist that number, and the list can be reordered or have gaps. Omitting the version means the highest-numbered one.
+
+Old key versions must stay enabled forever. Rotation works — new accounts use the new version — but retiring a version destroys every account derived from it, so the usual reason to rotate does not apply here.
 
 ## Signing is always two-phase
 
@@ -119,7 +128,7 @@ Payload classes carry hand-written `serialize()`/`deserialize()` because `Uint8A
 
 `config.example.yaml` defaults to composite with solana as main, so out of the box the write path fails. Use `driver: badger` for local development.
 
-**Accounts are only as durable as the repository.** The private key is derived from the KMS key plus a random per-account salt, and that salt lives nowhere but the repository — losing the badger store loses the funds, KMS access notwithstanding. There is no export or restore path yet; see the TODO in `service.findOrCreate`.
+**Accounts are only as durable as the repository.** The per-account salt lives nowhere but the repository, and without it the KMS key alone cannot rebuild anything — losing the badger store loses the funds. Backing up salts is the whole of the backup problem; there is no export or restore path yet, see the TODO in `service.findOrCreate`.
 
 ## Conventions
 

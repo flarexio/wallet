@@ -1,11 +1,17 @@
 package wallet
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"errors"
+	"io"
+	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -17,8 +23,82 @@ import (
 	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/audit"
 	"github.com/flarexio/wallet/conf"
+	"github.com/flarexio/wallet/keys"
 	"github.com/flarexio/wallet/persistence"
 )
+
+// fakeKeys stands in for Cloud KMS. Signature is deterministic, which is the
+// property the whole derivation scheme rests on, and every call is counted so
+// tests can tell a cache hit from a KMS round trip.
+type fakeKeys struct {
+	versions []int
+	calls    atomic.Int64
+}
+
+func (s *fakeKeys) Key(v ...int) (keys.Key, error) {
+	want := s.versions[len(s.versions)-1]
+	if len(v) > 0 {
+		want = v[0]
+	}
+
+	for _, ver := range s.versions {
+		if ver == want {
+			return &fakeKey{svc: s, version: ver}, nil
+		}
+	}
+
+	return nil, errors.New("key not found")
+}
+
+func (s *fakeKeys) Signature(data []byte, ver ...int) ([]byte, error) {
+	key, err := s.Key(ver...)
+	if err != nil {
+		return nil, err
+	}
+
+	return key.Signature(data)
+}
+
+func (s *fakeKeys) Verify(data []byte, sig []byte, ver ...int) (bool, error) {
+	want, err := s.Signature(data, ver...)
+	if err != nil {
+		return false, err
+	}
+
+	return string(want) == string(sig), nil
+}
+
+func (s *fakeKeys) Close() error { return nil }
+
+type fakeKey struct {
+	svc     *fakeKeys
+	version int
+}
+
+func (k *fakeKey) Signature(data []byte) ([]byte, error) {
+	k.svc.calls.Add(1)
+
+	sum := sha512.Sum512(append([]byte("fake-kms/"+strconv.Itoa(k.version)+"/"), data...))
+
+	return sum[:], nil
+}
+
+func (k *fakeKey) Verify(data []byte, sig []byte) (bool, error) {
+	want, err := k.Signature(data)
+	if err != nil {
+		return false, err
+	}
+
+	return string(want) == string(sig), nil
+}
+
+func (k *fakeKey) Version() int { return k.version }
+
+func (k *fakeKey) Public() crypto.PublicKey { return nil }
+
+func (k *fakeKey) Sign(_ io.Reader, digest []byte, _ crypto.SignerOpts) ([]byte, error) {
+	return k.Signature(digest)
+}
 
 const testOrigin = "https://wallet.flarex.io"
 
@@ -76,6 +156,7 @@ func (failingAudit) Close() error                                { return nil }
 type signingFixture struct {
 	svc       *service
 	passkeys  *fakePasskeys
+	keys      *fakeKeys
 	audit     audit.Log
 	account   *account.Account
 	assertion *protocol.ParsedCredentialAssertionData
@@ -90,21 +171,22 @@ func newSigningFixture(t *testing.T, auditLog audit.Log) *signingFixture {
 	}
 	t.Cleanup(func() { repo.Close() })
 
-	seed := make([]byte, ed25519.SeedSize)
-	seed[0] = 42
+	ks := &fakeKeys{versions: []int{1, 2, 3}}
+	pk := &fakePasskeys{}
 
-	a := &account.Account{
-		Subject:    "alice",
-		Salt:       "salt",
-		KeyVersion: 3,
-		PrivateKey: ed25519.NewKeyFromSeed(seed),
+	svc := &service{
+		accounts: repo,
+		keys:     ks,
+		passkeys: pk,
+		audit:    auditLog,
+		keyCache: newKeyCache(keyCacheTTL, keyCacheEntries),
+		sessions: make(map[string][]*Session),
 	}
 
-	if err := repo.Save(a); err != nil {
+	a, err := svc.findOrCreate("alice")
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	pk := &fakePasskeys{}
 
 	assertion := &protocol.ParsedCredentialAssertionData{}
 	assertion.ID = "credential-abc"
@@ -112,13 +194,9 @@ func newSigningFixture(t *testing.T, auditLog audit.Log) *signingFixture {
 	assertion.Response.CollectedClientData.Origin = testOrigin
 
 	return &signingFixture{
-		svc: &service{
-			accounts: repo,
-			passkeys: pk,
-			audit:    auditLog,
-			sessions: make(map[string][]*Session),
-		},
+		svc:       svc,
 		passkeys:  pk,
+		keys:      ks,
 		audit:     auditLog,
 		account:   a,
 		assertion: assertion,
@@ -163,7 +241,7 @@ func TestInitializeDoesNotSign(t *testing.T) {
 		return
 	}
 
-	assert.Equal(solana.Signature{}, t2.Message.Signature, "no signature may be parked before approval")
+	assert.Equal([]byte("hello"), t2.Message.Message, "the payload is parked, not a signature")
 
 	entries, err := f.audit.Entries()
 	assert.NoError(err)
@@ -201,7 +279,6 @@ func TestInitializeSignTransactionDoesNotSign(t *testing.T) {
 	}
 
 	assert.Empty(cached.Transaction.Transaction.Signatures)
-	assert.Empty(cached.Transaction.Signatures)
 }
 
 func TestFinalizeSignsAfterApproval(t *testing.T) {
@@ -265,7 +342,7 @@ func TestFinalizeRecordsWhatWasApproved(t *testing.T) {
 	assert.Equal(audit.SignMessage, e.Action)
 	assert.Equal(id, e.TransactionID)
 	assert.Equal(f.account.Wallet().String(), e.Wallet)
-	assert.Equal(3, e.KeyVersion)
+	assert.Equal(f.account.KeyVersion, e.KeyVersion)
 	assert.Equal("credential-abc", e.CredentialID)
 	assert.Equal(uint32(11), e.SignCount)
 	assert.Equal(testOrigin, e.Origin)
@@ -479,4 +556,96 @@ func TestFinalizeAcrossEndpointsDoesNotPanic(t *testing.T) {
 			assert.ErrorIs(err, account.ErrTransactionNotFound)
 		})
 	})
+}
+
+// A repeat signature inside the ttl must not go back to KMS.
+func TestDerivedKeyIsCached(t *testing.T) {
+	assert := assert.New(t)
+
+	f := newSigningFixture(t, audit.NewMemoryLog())
+
+	before := f.keys.calls.Load()
+
+	for range 3 {
+		if _, err := f.svc.SignMessage("alice", []byte("hello")); !assert.NoError(err) {
+			return
+		}
+	}
+
+	assert.Equal(before, f.keys.calls.Load(), "three signatures, no KMS round trip")
+}
+
+func TestExpiredKeyIsRederived(t *testing.T) {
+	assert := assert.New(t)
+
+	f := newSigningFixture(t, audit.NewMemoryLog())
+
+	now := time.Now()
+	f.svc.keyCache.now = func() time.Time { return now }
+
+	first, err := f.svc.SignMessage("alice", []byte("hello"))
+	if !assert.NoError(err) {
+		return
+	}
+
+	before := f.keys.calls.Load()
+
+	now = now.Add(keyCacheTTL + time.Second)
+
+	second, err := f.svc.SignMessage("alice", []byte("hello"))
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Greater(f.keys.calls.Load(), before, "an expired key is derived again")
+	assert.Equal(first, second, "re-derivation produces the same key")
+}
+
+// Pointing at the wrong KMS version would silently sign for a different wallet.
+// It has to fail instead.
+func TestWrongKeyVersionIsRefused(t *testing.T) {
+	assert := assert.New(t)
+
+	f := newSigningFixture(t, audit.NewMemoryLog())
+
+	a, err := f.svc.accounts.Find("alice")
+	if !assert.NoError(err) {
+		return
+	}
+
+	other := a.KeyVersion - 1
+	if !assert.GreaterOrEqual(other, 1, "fixture needs more than one key version") {
+		return
+	}
+
+	a.KeyVersion = other
+	if !assert.NoError(f.svc.accounts.Save(a)) {
+		return
+	}
+
+	f.svc.keyCache = newKeyCache(keyCacheTTL, keyCacheEntries)
+
+	_, err = f.svc.SignMessage("alice", []byte("hello"))
+	assert.ErrorIs(err, ErrKeyMismatch)
+}
+
+func TestWalletAddressSurvivesRederivation(t *testing.T) {
+	assert := assert.New(t)
+
+	f := newSigningFixture(t, audit.NewMemoryLog())
+
+	wallet, err := f.svc.Wallet("alice")
+	if !assert.NoError(err) {
+		return
+	}
+
+	f.svc.keyCache = newKeyCache(keyCacheTTL, keyCacheEntries)
+
+	sig, err := f.svc.SignMessage("alice", []byte("hello"))
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.True(ed25519.Verify(ed25519.PublicKey(wallet.Bytes()), []byte("hello"), sig[:]),
+		"a key derived after a cold cache still matches the stored wallet")
 }

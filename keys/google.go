@@ -70,29 +70,56 @@ func (svc *googleKeyService) Key(v ...int) (Key, error) {
 	return svc.NewKey(keyVersion)
 }
 
+// keyVersion resolves a KMS crypto key version by its own version number, not
+// by its position in the list: accounts persist the number and the list can be
+// reordered, filtered or paginated by KMS.
 func (svc *googleKeyService) keyVersion(v ...int) (*kmspb.CryptoKeyVersion, error) {
 	svc.RLock()
 	defer svc.RUnlock()
 
-	count := len(svc.keyVersions)
-	if count == 0 {
+	if len(svc.keyVersions) == 0 {
 		return nil, errors.New("key empty")
 	}
 
-	ver := count - 1
-	if len(v) > 0 {
-		ver = v[0] - 1
+	if len(v) == 0 {
+		var latest *kmspb.CryptoKeyVersion
+
+		for _, keyVersion := range svc.keyVersions {
+			if latest == nil || versionOf(keyVersion.Name) > versionOf(latest.Name) {
+				latest = keyVersion
+			}
+		}
+
+		return latest, nil
 	}
 
-	if ver < 0 {
+	want := v[0]
+	if want < 1 {
 		return nil, errors.New("invalid version")
 	}
 
-	if ver >= count {
-		return nil, errors.New("key not found")
+	for _, keyVersion := range svc.keyVersions {
+		if versionOf(keyVersion.Name) == want {
+			return keyVersion, nil
+		}
 	}
 
-	return svc.keyVersions[ver], nil
+	return nil, errors.New("key not found")
+}
+
+// versionOf reads the trailing version number out of a KMS resource name.
+func versionOf(name string) int {
+	parts := strings.Split(name, "/")
+	if len(parts) < 10 {
+		return 0
+	}
+
+	ver, err := strconv.Atoi(parts[9])
+	if err != nil {
+		return 0
+	}
+
+	return ver
 }
 
 func (svc *googleKeyService) Signature(data []byte, ver ...int) ([]byte, error) {
@@ -218,15 +245,5 @@ func (key *googleKey) Verify(data []byte, sig []byte) (bool, error) {
 }
 
 func (key *googleKey) Version() int {
-	parts := strings.Split(key.Name, "/")
-	if len(parts) < 10 {
-		return 0
-	}
-
-	ver, err := strconv.Atoi(parts[9])
-	if err != nil {
-		return 0
-	}
-
-	return ver
+	return versionOf(key.Name)
 }
