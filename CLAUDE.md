@@ -142,7 +142,7 @@ Payload classes carry hand-written `serialize()`/`deserialize()` because `Uint8A
 
 The file is always encrypted: AES-256-GCM under a PBKDF2-HMAC-SHA256 key. **A snapshot is fund-bearing on its own** — records written before keys stopped being persisted carry the private key outright, and current ones carry the salts, which reproduce every key given KMS access. Treat the file the way you would treat the keys themselves.
 
-The passphrase comes from `$WALLET_BACKUP_PASSPHRASE`, or a no-echo terminal prompt (confirmed twice when writing). Minimum 12 characters.
+The passphrase comes from `$WALLET_BACKUP_PASSPHRASE`, or a no-echo terminal prompt (confirmed twice when writing). Minimum `backup.MinPassphrase` characters — 8, chosen by the operator over the longer default; the snapshot is attacked offline, so the work factor is the only other thing slowing a guess down.
 
 The work factor is stored in the header and authenticated as AAD, so it can be raised later without orphaning older backups and cannot be rewritten downwards to make cracking cheaper. `Read` rejects a file declaring an implausible one rather than burning CPU on it. Tests use the floor; `TestRoundTripAtProductionCost` covers the real one and skips under `-short`.
 
