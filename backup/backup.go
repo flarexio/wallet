@@ -36,9 +36,7 @@ const (
 	minIterations = 1_000
 	maxIterations = 10_000_000
 
-	// MinPassphrase is short enough to type and long enough that the KDF is
-	// doing the work rather than the alphabet.
-	MinPassphrase = 12
+	MinPassphrase = 8
 )
 
 var (

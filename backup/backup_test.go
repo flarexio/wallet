@@ -208,3 +208,14 @@ func TestRoundTripAtProductionCost(t *testing.T) {
 		assert.Equal("account records", got)
 	}
 }
+
+func TestPassphraseLengthBoundary(t *testing.T) {
+	assert := assert.New(t)
+
+	assert.ErrorIs(CheckPassphrase(strings.Repeat("a", MinPassphrase-1)), ErrShortPassphrase)
+	assert.NoError(CheckPassphrase(strings.Repeat("a", MinPassphrase)))
+
+	// Length is counted in runes, so a short multi-byte passphrase is still short.
+	assert.ErrorIs(CheckPassphrase(strings.Repeat("密", MinPassphrase-1)), ErrShortPassphrase)
+	assert.NoError(CheckPassphrase(strings.Repeat("密", MinPassphrase)))
+}
