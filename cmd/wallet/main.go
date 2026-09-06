@@ -323,6 +323,11 @@ func backupStore(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	accounts, err := persistence.Accounts(cfg)
+	if err != nil {
+		return err
+	}
+
 	pass, err := passphrase(true)
 	if err != nil {
 		return err
@@ -352,7 +357,7 @@ func backupStore(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "wrote %s\n", out)
+	fmt.Fprintf(os.Stderr, "wrote %s (%d accounts)\n", out, accounts)
 
 	return nil
 }

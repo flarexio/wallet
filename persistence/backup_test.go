@@ -222,3 +222,36 @@ func TestBadgerConfigResolution(t *testing.T) {
 		assert.Error(err)
 	})
 }
+
+func TestAccountsCountsOnlyAccounts(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := onDiskConfig(t)
+
+	count, err := Accounts(cfg)
+	if assert.NoError(err) {
+		assert.Equal(0, count, "a fresh store holds nothing")
+	}
+
+	seed(t, cfg, "alice", "bob")
+
+	// A pending transaction shares the store but is not an account.
+	repo, err := NewBadgerAccountRepository(cfg)
+	if !assert.NoError(err) {
+		return
+	}
+
+	tx, err := account.NewSignMessageTransaction("alice", "b3f1c2d4-0000-4000-8000-000000000002", []byte("hi"))
+	if !assert.NoError(err) {
+		repo.Close()
+		return
+	}
+
+	assert.NoError(repo.CacheTransaction(tx, time.Minute))
+	assert.NoError(repo.Close())
+
+	count, err = Accounts(cfg)
+	if assert.NoError(err) {
+		assert.Equal(2, count)
+	}
+}

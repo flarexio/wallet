@@ -11,6 +11,8 @@ import (
 	"github.com/flarexio/wallet/conf"
 )
 
+const subjectPrefix = "sub:"
+
 func NewBadgerAccountRepository(cfg *conf.BadgerPersistenceConfig) (account.Repository, error) {
 	db, err := openBadger(cfg)
 	if err != nil {
@@ -25,7 +27,7 @@ type badgerAccountRepository struct {
 }
 
 func (repo *badgerAccountRepository) Save(a *account.Account) error {
-	key := []byte("sub:" + a.Subject)
+	key := []byte(subjectPrefix + a.Subject)
 
 	bs, err := json.Marshal(&a)
 	if err != nil {
@@ -40,7 +42,7 @@ func (repo *badgerAccountRepository) Save(a *account.Account) error {
 func (repo *badgerAccountRepository) Find(subject string) (*account.Account, error) {
 	var a *account.Account
 
-	key := []byte("sub:" + subject)
+	key := []byte(subjectPrefix + subject)
 
 	if err := repo.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)

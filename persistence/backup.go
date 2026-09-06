@@ -18,7 +18,7 @@ const restorePendingWrites = 256
 // Backup writes a snapshot of the badger store to w. The service must not be
 // running against the same directory.
 func Backup(cfg *conf.BadgerPersistenceConfig, w io.Writer) error {
-	db, err := openBadger(cfg)
+	db, err := openQuietBadger(cfg)
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func Backup(cfg *conf.BadgerPersistenceConfig, w io.Writer) error {
 
 // Restore loads a snapshot into an empty badger store.
 func Restore(cfg *conf.BadgerPersistenceConfig, r io.Reader) error {
-	db, err := openBadger(cfg)
+	db, err := openQuietBadger(cfg)
 	if err != nil {
 		return err
 	}
@@ -50,12 +50,50 @@ func Restore(cfg *conf.BadgerPersistenceConfig, r io.Reader) error {
 }
 
 func openBadger(cfg *conf.BadgerPersistenceConfig) (*badger.DB, error) {
-	opts := badger.DefaultOptions(cfg.Path + "/" + cfg.Name)
+	return badger.Open(badgerOptions(cfg))
+}
+
+// openQuietBadger is for the CLI, where badger's level tables are noise around
+// the one line the operator actually wants.
+func openQuietBadger(cfg *conf.BadgerPersistenceConfig) (*badger.DB, error) {
+	return badger.Open(badgerOptions(cfg).WithLogger(nil))
+}
+
+func badgerOptions(cfg *conf.BadgerPersistenceConfig) badger.Options {
 	if cfg.InMem {
-		opts = badger.DefaultOptions("").WithInMemory(true)
+		return badger.DefaultOptions("").WithInMemory(true)
 	}
 
-	return badger.Open(opts)
+	return badger.DefaultOptions(cfg.Path + "/" + cfg.Name)
+}
+
+// Accounts counts the account records in the store, so an operator can tell
+// whether they are backing up the store they meant to.
+func Accounts(cfg *conf.BadgerPersistenceConfig) (int, error) {
+	db, err := openQuietBadger(cfg)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+
+	var count int
+
+	err = db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = []byte(subjectPrefix)
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			count++
+		}
+
+		return nil
+	})
+
+	return count, err
 }
 
 func isEmpty(db *badger.DB) (bool, error) {
