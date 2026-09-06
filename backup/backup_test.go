@@ -180,21 +180,11 @@ func TestHeaderRecordsTheWorkFactor(t *testing.T) {
 	bs := sealed(t, "secrets")
 
 	assert.Equal(uint32(testIterations), binary.BigEndian.Uint32(bs[len(magic):]))
-
-	var full bytes.Buffer
-	if !assert.NoError(Write(&full, goodPass, func(w io.Writer) error {
-		_, err := w.Write([]byte("secrets"))
-		return err
-	})) {
-		return
-	}
-
-	assert.Equal(uint32(Iterations), binary.BigEndian.Uint32(full.Bytes()[len(magic):]),
-		"Write uses the production work factor")
 }
 
-// One end-to-end pass at the real cost, so the production path is exercised
-// rather than only the cheap one the other tests use.
+// The only test that pays the real work factor, so the production path is
+// covered without every other test spending seconds per derivation. Skipped
+// under -short.
 func TestRoundTripAtProductionCost(t *testing.T) {
 	if testing.Short() {
 		t.Skip("pbkdf2 at 600k iterations")
@@ -209,6 +199,9 @@ func TestRoundTripAtProductionCost(t *testing.T) {
 	})) {
 		return
 	}
+
+	assert.Equal(uint32(Iterations), binary.BigEndian.Uint32(buf.Bytes()[len(magic):]),
+		"Write uses the production work factor")
 
 	got, err := opened(t, buf.Bytes(), goodPass)
 	if assert.NoError(err) {
