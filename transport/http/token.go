@@ -57,6 +57,8 @@ func Init(ctx context.Context, cfg conf.JWTConfig) error {
 type Claims struct {
 	jwt.RegisteredClaims
 	Roles []string `json:"roles"`
+
+	PasskeyUserID string `json:"passkey_user_id,omitempty"`
 }
 
 func (c *Claims) Map() map[string]any {
