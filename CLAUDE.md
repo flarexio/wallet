@@ -22,7 +22,9 @@ go build ./...
 go test ./...
 go test -run TestSignTransaction ./            # single test
 go test -v ./keys/                             # single package
-go run cmd/wallet/main.go --path ./local-conf --port 8080
+go run cmd/wallet/main.go --path ./local-conf --port 8080     # serve is the default command
+go run cmd/wallet/main.go --path ./local-conf backup --out wallet.bak
+go run cmd/wallet/main.go --path ./local-conf restore --in wallet.bak
 
 # frontend (from app/)
 npm start          # ng serve on :4200
@@ -132,7 +134,21 @@ Payload classes carry hand-written `serialize()`/`deserialize()` because `Uint8A
 
 `config.example.yaml` defaults to composite with solana as main, so out of the box the write path fails. Use `driver: badger` for local development.
 
-**Accounts are only as durable as the repository.** The per-account salt lives nowhere but the repository, and without it the KMS key alone cannot rebuild anything — losing the badger store loses the funds. Backing up salts is the whole of the backup problem; there is no export or restore path yet, see the TODO in `service.findOrCreate`.
+**Accounts are only as durable as the repository.** The per-account salt lives nowhere but the repository, and without it the KMS key alone cannot rebuild anything — losing the badger store loses the funds.
+
+## Backup (`backup/`, `persistence/backup.go`)
+
+`wallet backup --out <file>` and `wallet restore --in <file>` snapshot the badger store through badger's own `Backup`/`Load`. **The service must not be running against the same directory** — both commands open badger directly.
+
+The file is always encrypted: AES-256-GCM under a PBKDF2-HMAC-SHA256 key. **A snapshot is fund-bearing on its own** — records written before keys stopped being persisted carry the private key outright, and current ones carry the salts, which reproduce every key given KMS access. Treat the file the way you would treat the keys themselves.
+
+The passphrase comes from `$WALLET_BACKUP_PASSPHRASE`, or a no-echo terminal prompt (confirmed twice when writing). Minimum 12 characters.
+
+The work factor is stored in the header and authenticated as AAD, so it can be raised later without orphaning older backups and cannot be rewritten downwards to make cracking cheaper. `Read` rejects a file declaring an implausible one rather than burning CPU on it. Tests use the floor; `TestRoundTripAtProductionCost` covers the real one and skips under `-short`.
+
+`Restore` refuses a store that already holds records — loading on top of live data would merge two histories rather than restore one.
+
+`cmd/wallet` uses `DefaultCommand: "serve"`, so bare `wallet` and `wallet --path X --port Y` still start the API and the Docker `ENTRYPOINT` is unchanged.
 
 ## Conventions
 
