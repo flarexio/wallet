@@ -58,8 +58,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 	Roles []string `json:"roles"`
 
-	// PasskeyUserID is the subject's id at the passkey provider, published by
-	// identity. Without it there is nothing tying an assertion to an account.
 	PasskeyUserID string `json:"passkey_user_id,omitempty"`
 }
 

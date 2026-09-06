@@ -20,8 +20,7 @@ func contextWith(claims *Claims) *gin.Context {
 	return c
 }
 
-// The passkey challenge is built around the id the caller supplies, so a
-// stolen token must not be usable with the attacker's own passkey.
+// A stolen token must not be usable with the attacker's own passkey.
 func TestCheckPasskeyUserRejectsAnotherUsersPasskey(t *testing.T) {
 	assert := assert.New(t)
 
@@ -31,8 +30,7 @@ func TestCheckPasskeyUserRejectsAnotherUsersPasskey(t *testing.T) {
 	assert.NoError(CheckPasskeyUser(c, "hanko-alice"))
 }
 
-// An empty request id must not match the absence of a claim, or a caller could
-// opt out by omitting the field.
+// Otherwise a caller opts out of the check by omitting the field.
 func TestCheckPasskeyUserRejectsEmptyRequestID(t *testing.T) {
 	assert := assert.New(t)
 
@@ -41,8 +39,7 @@ func TestCheckPasskeyUserRejectsEmptyRequestID(t *testing.T) {
 	assert.ErrorIs(CheckPasskeyUser(c, ""), ErrPasskeyUserMismatch)
 }
 
-// Tokens issued before identity published the claim have nothing to check
-// against. They pass, and the gap is recorded.
+// A token predating the claim passes, and the gap is recorded.
 func TestCheckPasskeyUserAllowsTokenWithoutTheClaim(t *testing.T) {
 	assert := assert.New(t)
 
@@ -53,8 +50,7 @@ func TestCheckPasskeyUserAllowsTokenWithoutTheClaim(t *testing.T) {
 	assert.Len(c.Errors, 1, "an unchecked request must leave a trace")
 }
 
-// Without the middleware there are no claims, and failing open would undo the
-// whole check.
+// Failing open here would undo the whole check.
 func TestCheckPasskeyUserFailsWithoutClaims(t *testing.T) {
 	assert := assert.New(t)
 
