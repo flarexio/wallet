@@ -12,12 +12,7 @@ import (
 )
 
 func NewBadgerAccountRepository(cfg *conf.BadgerPersistenceConfig) (account.Repository, error) {
-	opts := badger.DefaultOptions(cfg.Path + "/" + cfg.Name)
-	if cfg.InMem {
-		opts = badger.DefaultOptions("").WithInMemory(true)
-	}
-
-	db, err := badger.Open(opts)
+	db, err := openBadger(cfg)
 	if err != nil {
 		return nil, err
 	}
