@@ -675,3 +675,26 @@ func TestRecordWithoutPublicKeyIsRefused(t *testing.T) {
 	_, err = f.svc.SignMessage("alice", []byte("hello"))
 	assert.ErrorIs(err, ErrNoPublicKey)
 }
+
+// An account whose derivation scheme this build does not know must not be
+// signed for by falling back to the current one.
+func TestUnknownDerivationIsNotSigned(t *testing.T) {
+	assert := assert.New(t)
+
+	f := newSigningFixture(t, audit.NewMemoryLog())
+
+	a, err := f.svc.accounts.Find("alice")
+	if !assert.NoError(err) {
+		return
+	}
+
+	a.Derivation = account.CurrentDerivation + 1
+	if !assert.NoError(f.svc.accounts.Save(a)) {
+		return
+	}
+
+	f.svc.keyCache = newKeyCache(keyCacheTTL, keyCacheEntries)
+
+	_, err = f.svc.SignMessage("alice", []byte("hello"))
+	assert.ErrorIs(err, account.ErrUnsupportedDerivation)
+}

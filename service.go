@@ -181,7 +181,7 @@ func (svc *service) privateKey(a *account.Account) (ed25519.PrivateKey, error) {
 		return nil, err
 	}
 
-	privkey, err := account.Derive(a.Subject, a.Salt, key)
+	privkey, err := account.Derive(a.Subject, a.Salt, a.Derivation, key)
 	if err != nil {
 		return nil, err
 	}

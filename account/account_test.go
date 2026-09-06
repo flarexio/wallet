@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"strings"
@@ -42,12 +43,12 @@ func TestDeriveIsDeterministic(t *testing.T) {
 
 	key := &stubKey{version: 2}
 
-	first, err := Derive("alice", "salt", key)
+	first, err := Derive("alice", "salt", CurrentDerivation, key)
 	if !assert.NoError(err) {
 		return
 	}
 
-	second, err := Derive("alice", "salt", key)
+	second, err := Derive("alice", "salt", CurrentDerivation, key)
 	if !assert.NoError(err) {
 		return
 	}
@@ -60,17 +61,17 @@ func TestDeriveSeparatesSubjectsAndSalts(t *testing.T) {
 
 	key := &stubKey{version: 1}
 
-	alice, err := Derive("alice", "salt", key)
+	alice, err := Derive("alice", "salt", CurrentDerivation, key)
 	if !assert.NoError(err) {
 		return
 	}
 
-	bob, err := Derive("bob", "salt", key)
+	bob, err := Derive("bob", "salt", CurrentDerivation, key)
 	if !assert.NoError(err) {
 		return
 	}
 
-	resalted, err := Derive("alice", "other-salt", key)
+	resalted, err := Derive("alice", "other-salt", CurrentDerivation, key)
 	if !assert.NoError(err) {
 		return
 	}
@@ -94,7 +95,7 @@ func TestDeriveDoesNotSeedFromTheRawSignature(t *testing.T) {
 
 	naive := ed25519.NewKeyFromSeed(sig[:ed25519.SeedSize])
 
-	derived, err := Derive("alice", "salt", key)
+	derived, err := Derive("alice", "salt", CurrentDerivation, key)
 	if !assert.NoError(err) {
 		return
 	}
@@ -126,7 +127,7 @@ func TestNewAccountCarriesThePublicKey(t *testing.T) {
 	assert.Equal(pub, ed25519.PublicKey(a.Wallet().Bytes()))
 
 	// The salt is what makes the account reproducible.
-	again, err := Derive("alice", a.Salt, key)
+	again, err := Derive("alice", a.Salt, a.Derivation, key)
 	if assert.NoError(err) {
 		assert.Equal(privkey, again)
 	}
@@ -163,4 +164,56 @@ func TestAccountRecordHasNoPrivateKey(t *testing.T) {
 	assert.Equal(a.KeyVersion, back.KeyVersion)
 	assert.True(back.PublicKey.Equal(a.PublicKey))
 	assert.True(strings.Contains(record, "PublicKey"))
+}
+
+// Derivation 1 is frozen: accounts already exist under it, and changing what it
+// produces makes their funds unreachable. A new scheme gets a new number.
+func TestDerivation1IsFrozen(t *testing.T) {
+	assert := assert.New(t)
+
+	const want = "bca26f21d76f68ee61854570a9d9b013dd061a60eca5f935011b8c954cd7e42b"
+
+	privkey, err := Derive("alice", "fixed-salt-for-the-known-answer", 1, &stubKey{version: 1})
+	if !assert.NoError(err) {
+		return
+	}
+
+	pub, ok := privkey.Public().(ed25519.PublicKey)
+	if !assert.True(ok) {
+		return
+	}
+
+	assert.Equal(want, hex.EncodeToString(pub))
+}
+
+func TestUnknownDerivationIsRefused(t *testing.T) {
+	assert := assert.New(t)
+
+	key := &stubKey{version: 1}
+
+	for _, derivation := range []int{0, -1, CurrentDerivation + 1} {
+		_, err := Derive("alice", "salt", derivation, key)
+		assert.ErrorIs(err, ErrUnsupportedDerivation)
+	}
+}
+
+func TestAccountRecordCarriesItsDerivation(t *testing.T) {
+	assert := assert.New(t)
+
+	a, _, err := NewAccount("alice", &stubKey{version: 1})
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(CurrentDerivation, a.Derivation)
+
+	bs, err := json.Marshal(a)
+	if !assert.NoError(err) {
+		return
+	}
+
+	var back *Account
+	if assert.NoError(json.Unmarshal(bs, &back)) {
+		assert.Equal(a.Derivation, back.Derivation, "an account must remember how it was derived")
+	}
 }

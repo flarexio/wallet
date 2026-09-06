@@ -59,7 +59,11 @@ subject + random UUID salt → KMS ed25519 Signature()
 
 The KMS master key never leaves Google. **The account record persists only `Subject`, `Salt`, `KeyVersion` and `PublicKey` — never the private key**, which is derived on demand. A stolen store yields salts, which are useless without KMS; KMS access alone is useless without the salts.
 
-HKDF is load-bearing, not decoration: the first 32 bytes of an ed25519 signature are `R`, a value the scheme publishes, so seeding from them directly would make any exposure of a KMS signature an exposure of the account key. `derivationInfo` is part of the input — changing it changes every wallet address.
+HKDF is load-bearing, not decoration: the first 32 bytes of an ed25519 signature are `R`, a value the scheme publishes, so seeding from them directly would make any exposure of a KMS signature an exposure of the account key.
+
+The info string comes from `account.derivationInfo[a.Derivation]`, and the account record remembers which number it was created under. **Entries in that map are frozen** — accounts derive from them forever, so a new scheme gets a new number and `CurrentDerivation` moves, rather than an existing entry being edited. `TestDerivation1IsFrozen` is a known-answer test that fails if scheme 1 ever changes. An unknown number is refused (`ErrUnsupportedDerivation`) rather than falling back to the current one.
+
+This is also the only workable answer to "move everyone to a new key": KMS version rotation cannot do it, because old versions must stay enabled forever and existing accounts keep deriving from them. A new derivation number lets old and new coexist while funds are migrated.
 
 `service.privateKey` re-derives through a `keyCache` (LRU, 5-minute TTL, 4096 entries), so a burst of signing costs one KMS call rather than one per request. Cached keys are **not** zeroed on eviction: a caller may still hold the slice. Every derivation is checked against the stored `PublicKey` and fails with `ErrKeyMismatch` rather than signing for the wrong wallet.
 

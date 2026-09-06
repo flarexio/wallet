@@ -5,6 +5,8 @@ import (
 	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gagliardetto/solana-go"
@@ -14,14 +16,23 @@ import (
 	"github.com/flarexio/wallet/keys"
 )
 
+// CurrentDerivation is what new accounts are created with.
+const CurrentDerivation = 1
+
 // derivationInfo domain-separates the account key from anything else derived
-// from the same KMS key. Changing it changes every wallet address.
-const derivationInfo = "flarex-wallet-account-v1"
+// from the same KMS key. An entry here is permanent: every account created
+// under it derives from it forever, so a new scheme gets a new number rather
+// than an edit. Old entries can only be removed once no account uses them.
+var derivationInfo = map[int]string{
+	1: "flarex-wallet-account-v1",
+}
+
+var ErrUnsupportedDerivation = errors.New("unsupported derivation version")
 
 func NewAccount(subject string, key keys.Key) (*Account, ed25519.PrivateKey, error) {
 	salt := uuid.New().String()
 
-	privkey, err := Derive(subject, salt, key)
+	privkey, err := Derive(subject, salt, CurrentDerivation, key)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -30,6 +41,7 @@ func NewAccount(subject string, key keys.Key) (*Account, ed25519.PrivateKey, err
 		Subject:    subject,
 		Salt:       salt,
 		KeyVersion: key.Version(),
+		Derivation: CurrentDerivation,
 		PublicKey:  privkey.Public().(ed25519.PublicKey),
 		Model: model.Model{
 			CreatedAt: time.Now(),
@@ -46,13 +58,18 @@ func NewAccount(subject string, key keys.Key) (*Account, ed25519.PrivateKey, err
 // directly. The first 32 bytes of an ed25519 signature are R, a value the
 // signature scheme publishes; seeding from it would make any exposure of a
 // KMS signature an exposure of the account key.
-func Derive(subject string, salt string, key keys.Key) (ed25519.PrivateKey, error) {
+func Derive(subject string, salt string, derivation int, key keys.Key) (ed25519.PrivateKey, error) {
+	info, ok := derivationInfo[derivation]
+	if !ok {
+		return nil, fmt.Errorf("%w: %d", ErrUnsupportedDerivation, derivation)
+	}
+
 	sig, err := key.Signature([]byte(subject + salt))
 	if err != nil {
 		return nil, err
 	}
 
-	seed, err := hkdf.Key(sha256.New, sig, []byte(salt), derivationInfo+"|"+subject, ed25519.SeedSize)
+	seed, err := hkdf.Key(sha256.New, sig, []byte(salt), info+"|"+subject, ed25519.SeedSize)
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +83,7 @@ type Account struct {
 	Subject    string
 	Salt       string
 	KeyVersion int
+	Derivation int
 	PublicKey  ed25519.PublicKey
 	model.Model
 }
