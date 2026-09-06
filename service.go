@@ -89,6 +89,7 @@ const (
 var (
 	ErrNotAudited  = errors.New("signature withheld: audit entry could not be recorded")
 	ErrKeyMismatch = errors.New("derived key does not match the account's public key")
+	ErrNoPublicKey = errors.New("account record carries no public key")
 
 	ErrSessionNotFound = errors.New("session not found")
 	ErrSessionExists   = errors.New("session already exists")
@@ -135,6 +136,12 @@ func (svc *service) findOrCreate(subject string) (*account.Account, error) {
 
 	a, err := svc.accounts.Find(subject)
 	if err == nil {
+		// A record written before keys stopped being persisted has no public
+		// key, and PublicKeyFromBytes would quietly hand back the zero address.
+		if len(a.PublicKey) != ed25519.PublicKeySize {
+			return nil, ErrNoPublicKey
+		}
+
 		return a, nil
 	}
 
@@ -196,6 +203,10 @@ func (svc *service) signer(subject string) (*account.Account, ed25519.PrivateKey
 	a, err := svc.accounts.Find(subject)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if len(a.PublicKey) != ed25519.PublicKeySize {
+		return nil, nil, ErrNoPublicKey
 	}
 
 	privkey, err := svc.privateKey(a)

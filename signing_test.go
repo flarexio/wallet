@@ -649,3 +649,29 @@ func TestWalletAddressSurvivesRederivation(t *testing.T) {
 	assert.True(ed25519.Verify(ed25519.PublicKey(wallet.Bytes()), []byte("hello"), sig[:]),
 		"a key derived after a cold cache still matches the stored wallet")
 }
+
+// A record written before keys stopped being persisted has no public key.
+// Wallet must not answer with the zero address for it.
+func TestRecordWithoutPublicKeyIsRefused(t *testing.T) {
+	assert := assert.New(t)
+
+	f := newSigningFixture(t, audit.NewMemoryLog())
+
+	a, err := f.svc.accounts.Find("alice")
+	if !assert.NoError(err) {
+		return
+	}
+
+	a.PublicKey = nil
+	if !assert.NoError(f.svc.accounts.Save(a)) {
+		return
+	}
+
+	f.svc.keyCache = newKeyCache(keyCacheTTL, keyCacheEntries)
+
+	_, err = f.svc.Wallet("alice")
+	assert.ErrorIs(err, ErrNoPublicKey)
+
+	_, err = f.svc.SignMessage("alice", []byte("hello"))
+	assert.ErrorIs(err, ErrNoPublicKey)
+}
