@@ -94,6 +94,13 @@ func InitializeSignMessageHandler(endpoint endpoint.Endpoint) gin.HandlerFunc {
 			return
 		}
 
+		if err := CheckPasskeyUser(c, req.UserID); err != nil {
+			c.Abort()
+			c.Error(err)
+			c.String(http.StatusForbidden, err.Error())
+			return
+		}
+
 		req.Subject = username
 
 		ctx := c.Request.Context()
@@ -196,6 +203,13 @@ func InitializeSignTransactionHandler(endpoint endpoint.Endpoint) gin.HandlerFun
 			c.Abort()
 			c.Error(err)
 			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if err := CheckPasskeyUser(c, req.UserID); err != nil {
+			c.Abort()
+			c.Error(err)
+			c.String(http.StatusForbidden, err.Error())
 			return
 		}
 

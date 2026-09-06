@@ -118,6 +118,16 @@ Three distinct actions exist in the `wallet::accounts` domain, so a role can be 
 
 Adding or renaming a rule string in `main.go` means updating `policy/data.json` **and** every deployed `permissions.json` — a missing action fails closed with 403. `policy/policy_test.go` evaluates the real data file and will catch drift between the two.
 
+`JWTAuthorizator` leaves the verified claims in the gin context under `claimsKey`, which is how `CheckPasskeyUser` reaches them.
+
+## Passkey ownership
+
+The passkey challenge is built around the `user_id` in the request body, which is the caller's id at Hanko — a different namespace from the username in `sub`. Nothing used to connect the two, so a **stolen token could be finalized with the attacker's own passkey**: the second factor protected nothing it was meant to.
+
+`identity` now publishes the subject's passkey id as a `passkey_user_id` claim, and `CheckPasskeyUser` rejects a `user_id` that does not match it (403). Both `Initialize` handlers call it; `Finalize` does not need to, because Hanko verifies the assertion against the challenge Initialize already constrained.
+
+**A token without the claim is allowed through and recorded via `c.Error`.** Identity's `RefreshHandler` re-signs existing claims, so old tokens only gain the claim on a fresh sign-in — failing closed would log everyone out. Tighten this to a hard failure once every token in circulation has been reissued; `cfg.JWT.Refresh.Maximum` on the identity side bounds how long that is.
+
 ## dApp ↔ wallet transport
 
 `wallet-adapter` is not an injected browser extension. `FlarexWallet` (`src/wallet.ts`) opens a popup at the wallet origin, waits for a `WALLET_READY` postMessage, then exchanges `WalletMessage` / `WalletMessageResponse` envelopes (`src/message.ts`, types `TRUST_SITE` / `SIGN_MESSAGE` / `SIGN_TRANSACTION`) with strict `event.origin` checks. `FlarexWalletAdapter` wraps that in the standard `BaseMessageSignerWalletAdapter` interface and probes `/wallet/v1/health` to decide its `WalletReadyState`.

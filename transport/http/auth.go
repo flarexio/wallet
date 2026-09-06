@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -47,6 +48,8 @@ func JWTAuthorizator(policy policy.Policy) JWTAuth {
 				unauthorized(c, http.StatusUnauthorized, err)
 				return
 			}
+
+			c.Set(claimsKey, &claims)
 
 			input := map[string]any{
 				"domain":    domain,
@@ -98,4 +101,42 @@ func ParseToken(c *gin.Context, claims jwt.Claims) error {
 	)
 
 	return err
+}
+
+// claimsKey is where JWTAuthorizator leaves the verified claims for handlers
+// that need more than the policy decision.
+const claimsKey = "wallet.claims"
+
+var ErrPasskeyUserMismatch = errors.New("passkey does not belong to this account")
+
+// CheckPasskeyUser rejects a passkey user id that is not the token subject's.
+//
+// The passkey challenge is built around the id the caller supplies, so without
+// this a stolen token can be finalized with the attacker's own passkey and the
+// second factor protects nothing.
+//
+// Tokens issued before identity published the claim carry nothing to check
+// against. Those are let through and flagged, until every token in circulation
+// has been reissued.
+func CheckPasskeyUser(c *gin.Context, userID string) error {
+	value, ok := c.Get(claimsKey)
+	if !ok {
+		return errors.New("claims not found")
+	}
+
+	claims, ok := value.(*Claims)
+	if !ok {
+		return errors.New("claims not found")
+	}
+
+	if claims.PasskeyUserID == "" {
+		c.Error(fmt.Errorf("no passkey_user_id claim for %q: passkey ownership unchecked", claims.Subject))
+		return nil
+	}
+
+	if claims.PasskeyUserID != userID {
+		return ErrPasskeyUserMismatch
+	}
+
+	return nil
 }
