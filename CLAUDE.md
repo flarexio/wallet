@@ -142,7 +142,7 @@ Payload classes carry hand-written `serialize()`/`deserialize()` because `Uint8A
 - `solana` — on-chain; **every method returns "not implemented"**
 - `composite` — reads try cache then main; writes go to main synchronously and backfill cache in a goroutine. Transactions (the signing cache) only ever touch the cache repo.
 
-`config.example.yaml` defaults to composite with solana as main, so out of the box the write path fails. Use `driver: badger` for local development.
+`config.example.yaml` ships `driver: badger` — the only arrangement that actually works end to end. The composite/solana shape is kept there commented out for reference, and `conf/testdata/composite.yaml` is what keeps its nested parsing under test.
 
 **Accounts are only as durable as the repository.** The per-account salt lives nowhere but the repository, and without it the KMS key alone cannot rebuild anything — losing the badger store loses the funds.
 
