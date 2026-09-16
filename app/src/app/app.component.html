@@ -46,6 +46,10 @@
             <mat-icon fontSet="material-symbols-outlined">passkey</mat-icon>
             <span>Register Passkey</span>
           </button>
+          <button mat-menu-item (click)="switchRouter('/connected-sites')">
+            <mat-icon>link</mat-icon>
+            <span>Connected Sites</span>
+          </button>
           <mat-divider></mat-divider>
           <button mat-menu-item class="danger-action" (click)="logout()">
             <mat-icon>logout</mat-icon>

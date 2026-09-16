@@ -134,6 +134,18 @@ The passkey challenge is built around the `user_id` in the request body, which i
 
 Payload classes carry hand-written `serialize()`/`deserialize()` because `Uint8Array` doesn't survive structured cloning the way the API's base64 wire format needs. When you change a payload shape, update both sides *and* rebuild `lib/` — it's committed and is what npm consumers get.
 
+## Site trust (`app/`)
+
+Every dApp request is gated on a per-origin grant the user made, held by `TrustService` in `localStorage` and **scoped to the wallet address** — switching accounts does not inherit the previous one's grants. `WalletService.authorize` is the single gate; `TRUST_SITE`, `SIGN_MESSAGE` and `SIGN_TRANSACTION` all pass through it, so a site cannot skip the connect step and go straight to asking for a signature. A refused request comes back as `success: false` with `site not trusted`.
+
+**The origin that counts is `event.origin`, never `msg.origin`.** The latter is whatever the dApp typed into the envelope. `AppComponent.messageHandler` passes the browser-supplied one to `WalletService.messageHandler` as `verifiedOrigin`, and `SignMessageComponent` carries it through router state because the sign-message flow leaves and re-enters the handler.
+
+The session transport (`web+flarex:` protocol handler) has **no verified origin at all** — the message comes back out of the server, so its origin is only a claim. Such a request is therefore never matched against the trust list and its grant is never persisted: the user is asked every time, and the dialog says the address is unverified. That is what stops an unverified caller from riding on a decision the user made in a real window.
+
+`ConnectedSitesComponent` (`/connected-sites`, reachable from the user menu) lists the grants and revokes them one at a time or all at once.
+
+A grant only covers *reaching* the wallet. Every individual signature is still a passkey assertion, and the audit entry still records the origin the assertion was made from.
+
 ## Persistence
 
 `account.Repository` has three drivers behind `persistence.NewAccountRepository`:

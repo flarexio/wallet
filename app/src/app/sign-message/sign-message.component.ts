@@ -34,6 +34,7 @@ import { WalletService } from '../wallet.service';
 })
 export class SignMessageComponent {
   msg: WalletMessage | undefined;
+  origin: string | undefined;
   message = '';
   signature = '';
   displayedMessage = '';
@@ -51,6 +52,7 @@ export class SignMessageComponent {
     if (msg.type != WalletMessageType.SIGN_MESSAGE) return;
 
     this.msg = msg;
+    this.origin = state['origin'] as string | undefined;
 
     const payload = msg.payload as SignMessagePayload;
     const msgStr = Buffer.from(payload.message).toString();
@@ -68,7 +70,7 @@ export class SignMessageComponent {
         complete: () => console.log('complete'),
       });
     } else {
-      this.walletService.messageHandler(this.msg).subscribe({
+      this.walletService.messageHandler(this.msg, this.origin).subscribe({
         next: (resp) => {
           const payload = resp.payload as SignMessagePayload;
           if (payload.signature) {

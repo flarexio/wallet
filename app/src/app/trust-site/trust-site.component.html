@@ -1,0 +1,46 @@
+<h2 mat-dialog-title>Connect to site</h2>
+
+<mat-dialog-content>
+  <div class="site">
+    @if (req.icon) {
+      <img class="site-icon" [src]="req.icon" [alt]="req.app" loading="lazy">
+    } @else {
+      <mat-icon class="site-icon">public</mat-icon>
+    }
+
+    <div class="site-identity">
+      <span class="site-app">{{ req.app }}</span>
+      <span class="site-origin">{{ req.origin }}</span>
+    </div>
+  </div>
+
+  <p class="site-action">
+    This site wants to {{ req.action }} with your wallet.
+  </p>
+
+  @if (!req.verified) {
+    <p class="site-warning">
+      <mat-icon>warning</mat-icon>
+      <span>
+        This request did not come from a browser window, so the address above is
+        only what it claims to be. It will not be remembered.
+      </span>
+    </p>
+  }
+
+  @if (req.claimed) {
+    <p class="site-warning">
+      <mat-icon>warning</mat-icon>
+      <span>The site identified itself as {{ req.claimed }}, which is not where it is served from.</span>
+    </p>
+  }
+
+  <p class="site-note">
+    Connecting shares your wallet address. Every signature still needs your passkey.
+  </p>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-flat-button color="primary" (click)="connect()">Connect</button>
+</mat-dialog-actions>

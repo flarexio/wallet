@@ -249,12 +249,12 @@ export class AppComponent implements OnInit {
     switch (msg.type) {
       case WalletMessageType.SIGN_MESSAGE:
         this.router.navigate(['/sign-message'], { 
-          state: { msg }
+          state: { msg, origin: event.origin }
         });
         break;
 
       default:
-        this.walletService.messageHandler(msg)?.subscribe({
+        this.walletService.messageHandler(msg, event.origin)?.subscribe({
           next: (resp) => this.walletService.sendResponse(resp),
           error: (err) => console.error(err),
           complete: () => window.close(),
