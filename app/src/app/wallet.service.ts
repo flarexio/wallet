@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { BehaviorSubject, Observable, catchError, concatMap, map, of } from 'rxjs';
 
 import { 
@@ -12,6 +13,8 @@ import * as base58 from 'bs58';
 
 import { environment as env } from '../environments/environment';
 import { IdentityService, User } from './identity.service';
+import { TrustService } from './trust.service';
+import { TrustSiteComponent, TrustSiteRequest } from './trust-site/trust-site.component';
 
 @Injectable({
   providedIn: 'root'
@@ -28,7 +31,9 @@ export class WalletService {
 
   constructor(
     private http: HttpClient,
+    private dialog: MatDialog,
     private identity: IdentityService,
+    private trust: TrustService,
   ) {
     this.identity.userChange.pipe(
       concatMap((user) => {
@@ -98,41 +103,65 @@ export class WalletService {
     );
   }
 
-  messageHandler(msg: WalletMessage): Observable<WalletMessageResponse> {
+  /**
+   * Handles a request from a dApp. `verifiedOrigin` is the browser-supplied
+   * origin of the window that sent it — the only origin that can be believed.
+   * The session transport has none, so it passes nothing and the request is
+   * treated as unverified.
+   */
+  messageHandler(msg: WalletMessage, verifiedOrigin?: string): Observable<WalletMessageResponse> {
     switch (msg.type) {
-      case WalletMessageType.TRUST_SITE:
+      case WalletMessageType.TRUST_SITE: {
         const trustSitePayload = msg.payload as TrustSitePayload;
 
         const account = this.currentWallet;
         if (account == null) {
           trustSitePayload.accept = false;
-        } else {
-          trustSitePayload.accept = true;
-          trustSitePayload.pubkey = account.toBytes();
+
+          return of(new WalletMessageResponse(
+            msg.id,
+            msg.type,
+            true,
+            trustSitePayload,
+          ));
         }
 
-        // TODO: check if the site is trusted
-
-        return of(new WalletMessageResponse(
-          msg.id,
-          msg.type,
-          true,
-          trustSitePayload,
-        ));
-
-      case WalletMessageType.SIGN_MESSAGE:
-        const signMsgPayload = msg.payload as SignMessagePayload;
-        const message = signMsgPayload.message;
-
-        return this.signMessage(msg.id, message).pipe(
-          map((result) => {
-            const signature = base58.decode(result.signature);
+        return this.authorize(msg, verifiedOrigin, 'connect').pipe(
+          map((granted) => {
+            trustSitePayload.accept = granted;
+            trustSitePayload.pubkey = granted ? account.toBytes() : undefined;
 
             return new WalletMessageResponse(
               msg.id,
               msg.type,
               true,
-              new SignMessagePayload(message, signature),
+              trustSitePayload,
+            );
+          }),
+        );
+      }
+
+      case WalletMessageType.SIGN_MESSAGE: {
+        const signMsgPayload = msg.payload as SignMessagePayload;
+        const message = signMsgPayload.message;
+
+        return this.authorize(msg, verifiedOrigin, 'sign message').pipe(
+          concatMap((granted) => {
+            if (!granted) {
+              return this.refuse(msg);
+            }
+
+            return this.signMessage(msg.id, message).pipe(
+              map((result) => {
+                const signature = base58.decode(result.signature);
+
+                return new WalletMessageResponse(
+                  msg.id,
+                  msg.type,
+                  true,
+                  new SignMessagePayload(message, signature),
+                );
+              }),
             );
           }),
           catchError((err) => {
@@ -145,25 +174,34 @@ export class WalletService {
             ));
           }),
         );
+      }
 
-      case WalletMessageType.SIGN_TRANSACTION:
+      case WalletMessageType.SIGN_TRANSACTION: {
         const signTxPayload = msg.payload as SignTransactionPayload;
         const bytes = Buffer.from(signTxPayload.transaction);
         const tx = VersionedTransaction.deserialize(bytes);
 
-        return this.signTransaction(msg.id, tx).pipe(
-          map((result) => {
-            const bytes = result.transaction.serialize();
-            const versioned = result.versioned;
-            const signatures = result.signatures.map(
-              (sig) => base58.decode(sig),
-            );
+        return this.authorize(msg, verifiedOrigin, 'sign transaction').pipe(
+          concatMap((granted) => {
+            if (!granted) {
+              return this.refuse(msg);
+            }
 
-            return new WalletMessageResponse(
-              msg.id,
-              msg.type,
-              true,
-              new SignTransactionPayload(bytes, versioned, signatures),
+            return this.signTransaction(msg.id, tx).pipe(
+              map((result) => {
+                const bytes = result.transaction.serialize();
+                const versioned = result.versioned;
+                const signatures = result.signatures.map(
+                  (sig) => base58.decode(sig),
+                );
+
+                return new WalletMessageResponse(
+                  msg.id,
+                  msg.type,
+                  true,
+                  new SignTransactionPayload(bytes, versioned, signatures),
+                );
+              }),
             );
           }),
           catchError((err) => {
@@ -176,7 +214,74 @@ export class WalletService {
             ));
           }),
         );
+      }
     }
+  }
+
+  /**
+   * Decides whether a site may act on the current wallet, asking the user when
+   * it has not been connected before.
+   *
+   * A stored grant is only honoured for an origin the browser vouched for: an
+   * unverified request must not be able to ride on a decision the user made in
+   * a window, so it is always put back in front of them, and its answer is
+   * never written to the trust list.
+   */
+  private authorize(
+    msg: WalletMessage,
+    verifiedOrigin: string | undefined,
+    action: TrustSiteRequest['action'],
+  ): Observable<boolean> {
+    const account = this.currentWallet;
+    if (account == null) return of(false);
+
+    const verified = this.trust.normalize(verifiedOrigin);
+    const claimed = this.trust.normalize(msg.origin);
+
+    const origin = verified ?? claimed;
+    if (origin == null) return of(false);
+
+    if (verified != null && this.trust.isTrusted(account, origin)) {
+      this.trust.touch(account, origin);
+      return of(true);
+    }
+
+    const payload = msg.payload as Partial<TrustSitePayload>;
+
+    const req: TrustSiteRequest = {
+      origin,
+      app: payload.app ?? origin,
+      icon: payload.icon,
+      verified: verified != null,
+      claimed: claimed != null && claimed != origin ? claimed : undefined,
+      action,
+    };
+
+    return this.dialog.open(TrustSiteComponent, {
+      data: req,
+      disableClose: true,
+      width: '360px',
+    }).afterClosed().pipe(
+      map((granted) => {
+        if (!granted) return false;
+
+        if (verified != null) {
+          this.trust.trust(account, origin, req.app, req.icon);
+        }
+
+        return true;
+      }),
+    );
+  }
+
+  private refuse(msg: WalletMessage): Observable<WalletMessageResponse> {
+    return of(new WalletMessageResponse(
+      msg.id,
+      msg.type,
+      false,
+      undefined,
+      'site not trusted',
+    ));
   }
 
   signMessage(tid: string, msg: Uint8Array): Observable<SignMessageResponse> {

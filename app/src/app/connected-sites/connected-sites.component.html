@@ -1,0 +1,48 @@
+<mat-card appearance="outlined" class="sites-card">
+  <mat-card-header>
+    <mat-card-title>Connected Sites</mat-card-title>
+    <mat-card-subtitle>
+      Sites allowed to see this wallet address and ask it to sign.
+    </mat-card-subtitle>
+  </mat-card-header>
+
+  <mat-card-content>
+    @if (wallet == null) {
+      <p class="sites-empty">Sign in to see connected sites.</p>
+    } @else if (sites.length == 0) {
+      <p class="sites-empty">No site is connected to this wallet.</p>
+    } @else {
+      <mat-list>
+        @for (site of sites; track site.origin) {
+          <mat-list-item>
+            @if (site.icon) {
+              <img matListItemIcon class="site-icon" [src]="site.icon" [alt]="site.app" loading="lazy">
+            } @else {
+              <mat-icon matListItemIcon>public</mat-icon>
+            }
+
+            <span matListItemTitle>{{ site.app }}</span>
+            <span matListItemLine class="site-origin">{{ site.origin }}</span>
+            <span matListItemLine class="site-meta">
+              Last used {{ site.lastUsedAt | date:'medium' }}
+            </span>
+
+            <button mat-icon-button matListItemMeta
+                    aria-label="Disconnect"
+                    (click)="revoke(site)">
+              <mat-icon>link_off</mat-icon>
+            </button>
+          </mat-list-item>
+        }
+      </mat-list>
+    }
+  </mat-card-content>
+
+  @if (sites.length > 0) {
+    <mat-card-actions align="end">
+      <button mat-button class="danger-action" (click)="revokeAll()">
+        Disconnect All
+      </button>
+    </mat-card-actions>
+  }
+</mat-card>

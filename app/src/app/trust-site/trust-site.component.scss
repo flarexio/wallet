@@ -1,0 +1,50 @@
+.site {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.site-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+}
+
+.site-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.site-app {
+  font-weight: 500;
+}
+
+.site-origin {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+
+.site-action {
+  margin: 0 0 12px;
+}
+
+.site-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--mat-sys-error, #b3261e);
+
+  mat-icon {
+    flex: none;
+  }
+}
+
+.site-note {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
