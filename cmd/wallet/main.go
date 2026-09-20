@@ -24,9 +24,11 @@ import (
 	"github.com/flarexio/core/policy"
 	"github.com/flarexio/identity/passkeys"
 	"github.com/flarexio/wallet"
+	"github.com/flarexio/wallet/account"
 	"github.com/flarexio/wallet/backup"
 	"github.com/flarexio/wallet/conf"
 	"github.com/flarexio/wallet/persistence"
+	"github.com/flarexio/wallet/snapshot"
 	"github.com/flarexio/wallet/transport/http"
 )
 
@@ -128,6 +130,14 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	defer repo.Close()
+
+	if cfg.Backup.Enabled() {
+		stop, err := startScheduledBackup(cfg.Backup, repo, log)
+		if err != nil {
+			return err
+		}
+		defer stop()
+	}
 
 	svc, err := wallet.NewService(repo, passkeysSvc, cfg)
 	if err != nil {
@@ -239,6 +249,78 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	defer cancel()
 
 	return srv.Shutdown(shutdownCtx)
+}
+
+// startScheduledBackup hands the store the service is already serving from to
+// the backup schedule. Every failure here stops the server: an operator who
+// configured backups and silently got none would not find out until the day
+// they needed one.
+func startScheduledBackup(cfg conf.BackupConfig, repo account.Repository, log *zap.Logger) (func(), error) {
+	src, ok := repo.(persistence.Snapshotter)
+	if !ok {
+		return nil, errors.New("backup is scheduled but this persistence driver cannot be snapshotted")
+	}
+
+	pass := os.Getenv("WALLET_BACKUP_PASSPHRASE")
+	if pass == "" {
+		return nil, errors.New("backup is scheduled but WALLET_BACKUP_PASSPHRASE is not set")
+	}
+
+	if err := backup.CheckPassphrase(pass); err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	dst, err := backupDestination(ctx, cfg.Destination)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	scheduler := &snapshot.Scheduler{
+		Source:      src,
+		Destination: dst,
+		Passphrase:  pass,
+		Interval:    cfg.Interval,
+		Keep:        cfg.Keep,
+		AuditPath:   wallet.AuditLogPath(),
+		Log:         log,
+	}
+
+	if err := scheduler.Validate(); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	go func() {
+		if err := scheduler.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Error("scheduled backup stopped", zap.Error(err))
+		}
+	}()
+
+	return cancel, nil
+}
+
+func backupDestination(ctx context.Context, cfg conf.BackupDestinationConfig) (snapshot.Destination, error) {
+	switch cfg.Driver {
+	case conf.BackupDestinationDir:
+		if cfg.Dir == nil {
+			return nil, errors.New("backup destination dir needs a path")
+		}
+
+		return snapshot.NewDir(cfg.Dir.Path)
+
+	case conf.BackupDestinationGCS:
+		if cfg.GCS == nil {
+			return nil, errors.New("backup destination gcs needs a bucket")
+		}
+
+		return snapshot.NewGCS(ctx, cfg.GCS.Bucket, cfg.GCS.Prefix)
+
+	default:
+		return nil, errors.New("backup is scheduled but no destination is set")
+	}
 }
 
 func storePath(cmd *cli.Command) (string, error) {

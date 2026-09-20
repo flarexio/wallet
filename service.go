@@ -49,7 +49,7 @@ func NewService(accounts account.Repository, passkeys passkeys.Service, cfg conf
 	sessionKey := cfg.Keys.Session.Key
 	privkey := ed25519.NewKeyFromSeed(sessionKey[:])
 
-	auditLog, err := audit.NewFileLog(filepath.Join(conf.Path, auditLogName))
+	auditLog, err := audit.NewFileLog(AuditLogPath())
 	if err != nil {
 		keys.Close()
 		return nil, err
@@ -85,6 +85,12 @@ const (
 
 	auditLogName = "audit.log"
 )
+
+// AuditLogPath is where the signature log lives. It is exported so that
+// whatever backs the wallet up does not have to re-derive the name.
+func AuditLogPath() string {
+	return filepath.Join(conf.Path, auditLogName)
+}
 
 var (
 	ErrNotAudited  = errors.New("signature withheld: audit entry could not be recorded")
