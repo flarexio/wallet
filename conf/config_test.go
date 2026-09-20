@@ -33,6 +33,37 @@ func TestConfig(t *testing.T) {
 
 	assert.Len(cfg.Keys.Session.Key, 32)
 
+	assert.Equal(PersistenceDriverBadger, cfg.Persistence.Driver)
+	assert.NotNil(cfg.Persistence.Badger)
+
+	badger := cfg.Persistence.Badger
+	assert.Equal("wallets", badger.Name)
+	assert.Equal(Path, badger.Path)
+	assert.False(badger.InMem)
+
+	assert.Equal("identity.flarex.io", cfg.JWT.Issuer)
+	assert.Equal("talkix.flarex.io", cfg.JWT.Audience)
+	assert.Equal("https://identity.flarex.io/.well-known/jwks.json", cfg.JWT.JWKsURL)
+}
+
+func TestCompositeConfig(t *testing.T) {
+	assert := assert.New(t)
+
+	Path = "~/.flarex/wallet"
+
+	f, err := os.Open("testdata/composite.yaml")
+	if err != nil {
+		assert.Fail(err.Error())
+		return
+	}
+	defer f.Close()
+
+	var cfg Config
+	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+		assert.Fail(err.Error())
+		return
+	}
+
 	assert.Equal(PersistenceDriverComposite, cfg.Persistence.Driver)
 	assert.NotNil(cfg.Persistence.Composite)
 
@@ -47,8 +78,4 @@ func TestConfig(t *testing.T) {
 	assert.Equal("fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL", composite.Main.Solana.Program)
 	assert.Equal(Path, composite.Main.Solana.Path)
 	assert.Equal("id.json", composite.Main.Solana.Account)
-
-	assert.Equal("identity.flarex.io", cfg.JWT.Issuer)
-	assert.Equal("talkix.flarex.io", cfg.JWT.Audience)
-	assert.Equal("https://identity.flarex.io/.well-known/jwks.json", cfg.JWT.JWKsURL)
 }

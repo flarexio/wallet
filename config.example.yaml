@@ -8,21 +8,30 @@ keys:
     key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
 
 persistence:
-  driver: composite
-  composite:
-    main:
-      driver: solana
-      solana:
-        rpc: https://api.devnet.solana.com
-        program: fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL
-        path: # default: $HOME/.flarex/wallet
-        account: id.json
-    cache:
-      driver: badger
-      badger:
-        name: wallets
-        path: # default: $HOME/.flarex/wallet
-        # inmem: false
+  driver: badger
+  badger:
+    name: wallets
+    path: # default: $HOME/.flarex/wallet
+    # inmem: false
+
+# The solana driver is not implemented yet, so the composite arrangement below
+# fails on every write. It is kept as a shape reference, not a usable default.
+#
+# persistence:
+#   driver: composite
+#   composite:
+#     main:
+#       driver: solana
+#       solana:
+#         rpc: https://api.devnet.solana.com
+#         program: fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL
+#         path: # default: $HOME/.flarex/wallet
+#         account: id.json
+#     cache:
+#       driver: badger
+#       badger:
+#         name: wallets
+#         path: # default: $HOME/.flarex/wallet
 
 jwt:
   issuer: identity.flarex.io
