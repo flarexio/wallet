@@ -1,0 +1,9 @@
+# Scheduled backup, kept here because config.example.yaml ships it commented
+# out — an example that runs must not need $WALLET_BACKUP_PASSPHRASE.
+backup:
+  interval: 6h
+  destination:
+    driver: gcs
+    gcs:
+      bucket: flarex-wallet-backups
+      prefix: prod

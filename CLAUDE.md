@@ -156,11 +156,11 @@ A grant only covers *reaching* the wallet. Every individual signature is still a
 
 `config.example.yaml` ships `driver: badger` — the only arrangement that actually works end to end. The composite/solana shape is kept there commented out for reference, and `conf/testdata/composite.yaml` is what keeps its nested parsing under test.
 
-**Accounts are only as durable as the repository.** The per-account salt lives nowhere but the repository, and without it the KMS key alone cannot rebuild anything — losing the badger store loses the funds.
+**Accounts are only as durable as the repository.** The per-account salt lives nowhere but the repository, and without it the KMS key alone cannot rebuild anything — losing the badger store loses the funds. That is the whole reason `snapshot/` exists; a deployment without a configured backup destination is one disk away from losing every wallet.
 
 ## Backup (`backup/`, `persistence/backup.go`)
 
-`wallet backup --out <file>` and `wallet restore --in <file>` snapshot the badger store through badger's own `Backup`/`Load`. **The service must not be running against the same directory** — both commands open badger directly.
+`wallet backup --out <file>` and `wallet restore --in <file>` snapshot the badger store through badger's own `Backup`/`Load`. **The service must not be running against the same directory** — that is a limit of the *commands*, which open badger themselves and badger locks a directory exclusively. `db.Backup` needs no such thing, which is what `snapshot/` uses.
 
 The file is always encrypted: AES-256-GCM under a PBKDF2-HMAC-SHA256 key. **A snapshot is fund-bearing on its own** — records written before keys stopped being persisted carry the private key outright, and current ones carry the salts, which reproduce every key given KMS access. Treat the file the way you would treat the keys themselves.
 
@@ -171,6 +171,24 @@ The work factor is stored in the header and authenticated as AAD, so it can be r
 `Restore` refuses a store that already holds records — loading on top of live data would merge two histories rather than restore one.
 
 `cmd/wallet` uses `DefaultCommand: "serve"`, so bare `wallet` and `wallet --path X --port Y` still start the API and the Docker `ENTRYPOINT` is unchanged.
+
+## Scheduled backup (`snapshot/`)
+
+The CLI covers a planned snapshot; it does not cover the disk dying at 3am. `snapshot.Scheduler` runs inside `serve`, against the store already open, and ships the result off the machine.
+
+`persistence.Snapshotter` is what makes that possible — `badgerAccountRepository.Snapshot` is `db.Backup` on the live handle. The composite repository forwards to **main**, never the cache: accounts are written to main synchronously and only backfilled into the cache, so the cache can be missing an account whose goroutine had not landed.
+
+**Snapshots are always full** (`since` is always 0). badger streams incrementally and `Snapshot` exposes it, but a record here is about a hundred bytes, and a full run leaves every file independently restorable rather than meaningful only as part of a chain.
+
+`audit.log` is backed up alongside the store — same disk, same problem, and `NewFileLog` refuses to open a log that does not verify, so losing it can keep the service from starting. It is copied while the log is being appended to; a prefix of a hash chain still verifies, so no locking is needed.
+
+Retention counts store and audit files **separately**, so runs from before the audit backup existed don't make the two sets age at different rates. Old files are deleted only after a successful upload.
+
+**Nothing is taken at startup**, only on the tick. A crash-looping service would otherwise write a snapshot per restart and push every good one out through retention.
+
+Everything about the schedule **fails at startup rather than degrading**: no `$WALLET_BACKUP_PASSPHRASE`, no destination, a driver that cannot be snapshotted — all stop `serve`. An operator who thinks they have backups and doesn't is worse off than one who knows they don't. A failure *during* a run is logged and retried on the next tick; that one must not take the wallet down.
+
+`TestSnapshotRestoresWhileTheStoreIsOpen` is the drill: snapshot a store that is open and serving, restore into an empty one, compare. It pays the real work factor (~1.4s per PBKDF2 derivation) and skips under `-short`; the rest of the package's tests avoid encryption entirely so the suite stays quick.
 
 ## Conventions
 

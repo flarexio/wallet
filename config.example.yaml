@@ -33,6 +33,24 @@ persistence:
 #         name: wallets
 #         path: # default: $HOME/.flarex/wallet
 
+# The running service can snapshot itself on a schedule and ship the result off
+# the machine. It is off until an interval is set, and the passphrase comes
+# from $WALLET_BACKUP_PASSPHRASE — serve refuses to start if one is scheduled
+# without it, rather than run a wallet whose operator believes it is backed up.
+#
+# backup:
+#   interval: 6h
+#   keep: 28          # default: 28
+#   destination:
+#     driver: dir
+#     dir:
+#       path: /var/backups/wallet
+#
+#     # driver: gcs
+#     # gcs:
+#     #   bucket: flarex-wallet-backups
+#     #   prefix: prod
+
 jwt:
   issuer: identity.flarex.io
   audience: talkix.flarex.io
