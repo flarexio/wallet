@@ -176,19 +176,17 @@ The work factor is stored in the header and authenticated as AAD, so it can be r
 
 The CLI covers a planned snapshot; it does not cover the disk dying at 3am. `snapshot.Scheduler` runs inside `serve`, against the store already open, and ships the result off the machine.
 
-`persistence.Snapshotter` is what makes that possible — `badgerAccountRepository.Snapshot` is `db.Backup` on the live handle. The composite repository forwards to **main**, never the cache: accounts are written to main synchronously and only backfilled into the cache, so the cache can be missing an account whose goroutine had not landed.
+`persistence.Snapshotter` is what makes that possible — `badgerAccountRepository.Snapshot` is `db.Backup` on the live handle. The composite repository forwards to **main**, never the cache: the cache is backfilled in a goroutine and can be missing an account that has not landed.
 
-**Snapshots are always full** (`since` is always 0). badger streams incrementally and `Snapshot` exposes it, but a record here is about a hundred bytes, and a full run leaves every file independently restorable rather than meaningful only as part of a chain.
+**Snapshots are always full** (`since` is always 0). A record here is about a hundred bytes, and a full run leaves every file independently restorable rather than meaningful only as part of a chain.
 
-`audit.log` is backed up alongside the store — same disk, same problem, and `NewFileLog` refuses to open a log that does not verify, so losing it can keep the service from starting. It is copied while the log is being appended to; a prefix of a hash chain still verifies, so no locking is needed.
+`audit.log` is backed up alongside the store — same disk, same problem, and `NewFileLog` refuses a log that does not verify, so losing it can keep the service from starting. No locking: a prefix of a hash chain still verifies.
 
-Retention counts store and audit files **separately**, so runs from before the audit backup existed don't make the two sets age at different rates. Old files are deleted only after a successful upload.
+Retention counts store and audit files **separately**, so runs from before the audit backup existed don't age the two sets differently. Old files are deleted only after a successful upload. **Nothing is taken at startup**, only on the tick — a crash-looping service would push every good run out through retention.
 
-**Nothing is taken at startup**, only on the tick. A crash-looping service would otherwise write a snapshot per restart and push every good one out through retention.
+Everything about the schedule **fails at startup rather than degrading**: no `$WALLET_BACKUP_PASSPHRASE`, no destination, a driver that cannot be snapshotted — all stop `serve`. A failure *during* a run is logged and retried on the next tick; that one must not take the wallet down.
 
-Everything about the schedule **fails at startup rather than degrading**: no `$WALLET_BACKUP_PASSPHRASE`, no destination, a driver that cannot be snapshotted — all stop `serve`. An operator who thinks they have backups and doesn't is worse off than one who knows they don't. A failure *during* a run is logged and retried on the next tick; that one must not take the wallet down.
-
-`TestSnapshotRestoresWhileTheStoreIsOpen` is the drill: snapshot a store that is open and serving, restore into an empty one, compare. It pays the real work factor (~1.4s per PBKDF2 derivation) and skips under `-short`; the rest of the package's tests avoid encryption entirely so the suite stays quick.
+`TestSnapshotRestoresWhileTheStoreIsOpen` is the drill: snapshot a store that is open and serving, restore into an empty one, compare. It pays the real work factor (~1.4s per PBKDF2 derivation, and ~54s for the package under `-race`) and skips under `-short`.
 
 ## Conventions
 

@@ -103,12 +103,8 @@ export class WalletService {
     );
   }
 
-  /**
-   * Handles a request from a dApp. `verifiedOrigin` is the browser-supplied
-   * origin of the window that sent it — the only origin that can be believed.
-   * The session transport has none, so it passes nothing and the request is
-   * treated as unverified.
-   */
+  // verifiedOrigin is the browser-supplied origin, the only one that can be
+  // believed. The session transport has none and passes nothing.
   messageHandler(msg: WalletMessage, verifiedOrigin?: string): Observable<WalletMessageResponse> {
     switch (msg.type) {
       case WalletMessageType.TRUST_SITE: {
@@ -218,15 +214,8 @@ export class WalletService {
     }
   }
 
-  /**
-   * Decides whether a site may act on the current wallet, asking the user when
-   * it has not been connected before.
-   *
-   * A stored grant is only honoured for an origin the browser vouched for: an
-   * unverified request must not be able to ride on a decision the user made in
-   * a window, so it is always put back in front of them, and its answer is
-   * never written to the trust list.
-   */
+  // A stored grant is only honoured for an origin the browser vouched for, so
+  // an unverified request cannot ride on a decision made in a real window.
   private authorize(
     msg: WalletMessage,
     verifiedOrigin: string | undefined,

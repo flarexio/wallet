@@ -86,8 +86,8 @@ const (
 	auditLogName = "audit.log"
 )
 
-// AuditLogPath is where the signature log lives. It is exported so that
-// whatever backs the wallet up does not have to re-derive the name.
+// AuditLogPath is exported so whatever backs the wallet up need not re-derive
+// the name.
 func AuditLogPath() string {
 	return filepath.Join(conf.Path, auditLogName)
 }

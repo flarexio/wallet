@@ -65,8 +65,7 @@ func TestExpiredKeepsTheNewest(t *testing.T) {
 	assert.Nil(expired(names, storePrefix, storeSuffix, 9))
 }
 
-// The timestamp sorts lexically in the same order it sorts chronologically,
-// which is the only reason retention can work off names.
+// Retention works off names, so the stamp must sort chronologically.
 func TestStampSortsChronologically(t *testing.T) {
 	assert := assert.New(t)
 
@@ -76,8 +75,7 @@ func TestStampSortsChronologically(t *testing.T) {
 	assert.Less(earlier, later)
 }
 
-// A run that predates the audit backup must not make the two sets age at
-// different rates, so each kind is counted on its own.
+// Runs predating the audit backup must not age the two sets differently.
 func TestPruneCountsStoreAndAuditSeparately(t *testing.T) {
 	assert := assert.New(t)
 
@@ -214,10 +212,7 @@ func testAccount(subject string, n byte) *account.Account {
 	}
 }
 
-// The drill nobody runs until the day it matters: take a snapshot of a store
-// that is open and serving, then put it back into an empty one and check the
-// accounts came through. A backup that has never been restored is not a
-// backup.
+// A backup that has never been restored is not a backup.
 func TestSnapshotRestoresWhileTheStoreIsOpen(t *testing.T) {
 	if testing.Short() {
 		t.Skip("encrypts and decrypts at the production work factor")
@@ -266,8 +261,7 @@ func TestSnapshotRestoresWhileTheStoreIsOpen(t *testing.T) {
 		return
 	}
 
-	// The store is still open and serving — that is the point of running the
-	// snapshot in process rather than through the CLI.
+	// Still open and serving: the point of snapshotting in process.
 	if _, err := repo.Find("alice"); !assert.NoError(err) {
 		return
 	}
@@ -323,8 +317,7 @@ func TestSnapshotRestoresWhileTheStoreIsOpen(t *testing.T) {
 		assert.Equal([]byte(want.PublicKey), []byte(got.PublicKey))
 	}
 
-	// The audit log travels with the store: it lives on the same disk and has
-	// the same problem.
+	// The audit log travels with the store.
 	af, err := os.Open(filepath.Join(dir, auditLog))
 	if !assert.NoError(err) {
 		return

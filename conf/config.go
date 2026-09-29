@@ -166,16 +166,14 @@ type JWTConfig struct {
 	JWKsURL  string `yaml:"jwksURL"`
 }
 
-// DefaultBackupKeep is how many scheduled runs are left at the destination
-// when the config does not say. Four weeks of six-hourly runs is long enough
-// that a corruption introduced over a weekend is still recoverable from.
+// DefaultBackupKeep is four weeks of six-hourly runs, so a corruption
+// introduced over a weekend is still recoverable from.
 const DefaultBackupKeep = 28
 
 type BackupDestinationDriver int
 
-// BackupDestinationNone is the zero value, so a config that schedules backups
-// without naming somewhere to put them fails as exactly that rather than as a
-// directory with no path.
+// BackupDestinationNone is the zero value, so a schedule with no destination
+// fails as that rather than as a directory with no path.
 const (
 	BackupDestinationNone BackupDestinationDriver = iota
 	BackupDestinationDir
@@ -196,8 +194,7 @@ func ParseBackupDestinationDriver(value string) (BackupDestinationDriver, error)
 }
 
 // BackupConfig schedules the backup the running service takes of itself. A
-// zero Interval leaves it off, which is the default: shipping snapshots
-// somewhere needs a destination the operator chose.
+// zero Interval leaves it off, which is the default.
 type BackupConfig struct {
 	Interval    time.Duration
 	Keep        int
@@ -255,8 +252,7 @@ func (cfg *BackupDestinationConfig) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
-	// An absent destination is not an error while backups are off; serve
-	// checks for one only when the interval asks for it.
+	// Absent is not an error while backups are off; serve checks then.
 	if raw.Driver == "" {
 		return nil
 	}

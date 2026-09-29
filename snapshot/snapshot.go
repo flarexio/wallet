@@ -1,10 +1,6 @@
 // Package snapshot takes scheduled encrypted backups of a running wallet and
-// ships them off the machine.
-//
-// The per-account salt lives nowhere but the account store, and the KMS key
-// alone rebuilds nothing without it — so a store that exists on exactly one
-// disk is a set of wallets that one disk failure empties. Keeping a copy
-// somewhere else is the whole job of this package.
+// ships them off the machine. The per-account salt lives nowhere but the
+// account store, so one disk failure empties every wallet.
 package snapshot
 
 import (
@@ -28,14 +24,12 @@ type Source interface {
 	Snapshot(w io.Writer, since uint64) (uint64, error)
 }
 
-// Destination is where finished snapshots are kept. Names are opaque to it and
-// sort chronologically, which is what retention relies on.
+// Destination is where finished snapshots are kept. String is for logs and
+// must not reveal credentials.
 type Destination interface {
 	Put(ctx context.Context, name string, r io.Reader) error
 	List(ctx context.Context) ([]string, error)
 	Delete(ctx context.Context, name string) error
-
-	// String names the destination for logs. It must not reveal credentials.
 	String() string
 }
 
@@ -46,8 +40,7 @@ const (
 	auditPrefix = "audit-"
 	auditSuffix = ".log.enc"
 
-	// stamp sorts lexically in the same order as it sorts chronologically,
-	// which is what lets retention work off names alone.
+	// Sorts lexically in chronological order, which is what retention needs.
 	stamp = "20060102T150405Z"
 )
 
@@ -58,28 +51,23 @@ var (
 	ErrNoKeep        = errors.New("snapshot needs to keep at least one run")
 )
 
-// Scheduler runs Once on an interval for as long as its context lives.
 type Scheduler struct {
 	Source      Source
 	Destination Destination
 	Passphrase  string
 	Interval    time.Duration
 
-	// Keep is how many runs to leave at the destination. Older ones are
-	// deleted after a successful upload, never before.
 	Keep int
 
-	// AuditPath is the hash-chained signature log, backed up alongside the
-	// store. It lives on the same disk and has the same problem. Empty skips
-	// it.
+	// AuditPath is the signature log, backed up alongside the store. Empty
+	// skips it.
 	AuditPath string
 
 	Log *zap.Logger
 }
 
-// Validate reports whether the schedule is complete enough to run. Run calls
-// it too, but Run is normally started in a goroutine where its error would go
-// nowhere — so the caller checks first and refuses to start the server.
+// Validate is called by Run, but Run is normally started in a goroutine where
+// its error would go nowhere, so callers check first.
 func (s *Scheduler) Validate() error {
 	switch {
 	case s.Source == nil:
@@ -96,13 +84,9 @@ func (s *Scheduler) Validate() error {
 }
 
 // Run takes a snapshot every Interval until ctx is cancelled. A failed run is
-// logged and retried at the next tick rather than stopping the schedule: a
-// backup that cannot be written is not a reason to take the wallet down, but
-// it is a reason to be loud about it.
-//
-// Nothing is taken at startup. A service that is crash-looping would otherwise
-// write a snapshot per restart and push every good one out through retention,
-// which is the opposite of what a backup is for.
+// logged and retried on the next tick rather than taking the wallet down.
+// Nothing is taken at startup: a crash-looping service would push every good
+// run out through retention.
 func (s *Scheduler) Run(ctx context.Context) error {
 	if err := s.Validate(); err != nil {
 		return err
@@ -137,12 +121,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 }
 
-// Once writes one snapshot of the store, one of the audit log, and then prunes
-// whatever the retention no longer covers.
-//
-// Snapshots are always taken in full. badger can stream incrementally, but the
-// records here are around a hundred bytes each, and a full run leaves every
-// file independently restorable instead of only meaningful as part of a chain.
+// Once backs up the store and the audit log, then prunes. Snapshots are always
+// full — records are around a hundred bytes, and a full run leaves every file
+// independently restorable.
 func (s *Scheduler) Once(ctx context.Context) error {
 	if err := s.Validate(); err != nil {
 		return err
@@ -174,9 +155,7 @@ func (s *Scheduler) Once(ctx context.Context) error {
 	return s.prune(ctx)
 }
 
-// copyAuditLog reads whatever is on disk right now. An append landing mid-read
-// just means the copy stops a few entries short, and a prefix of a hash chain
-// still verifies — so this does not need to stop the log to be consistent.
+// copyAuditLog needs no locking: a prefix of a hash chain still verifies.
 func (s *Scheduler) copyAuditLog(w io.Writer) error {
 	f, err := os.Open(s.AuditPath)
 	if err != nil {
@@ -203,9 +182,8 @@ func (s *Scheduler) put(ctx context.Context, name string, fn func(io.Writer) err
 	return s.Destination.Put(ctx, name, &buf)
 }
 
-// prune deletes the runs the retention no longer covers. Store and audit files
-// are counted separately so that a run that predates the audit backup does not
-// make the two sets age at different rates.
+// prune counts store and audit files separately, so runs that predate the
+// audit backup do not age the two sets at different rates.
 func (s *Scheduler) prune(ctx context.Context) error {
 	names, err := s.Destination.List(ctx)
 	if err != nil {
@@ -228,7 +206,6 @@ func (s *Scheduler) prune(ctx context.Context) error {
 	return nil
 }
 
-// expired returns the names beyond the newest keep, oldest first.
 func expired(names []string, prefix, suffix string, keep int) []string {
 	matched := make([]string, 0, len(names))
 

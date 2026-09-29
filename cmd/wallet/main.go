@@ -251,10 +251,8 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-// startScheduledBackup hands the store the service is already serving from to
-// the backup schedule. Every failure here stops the server: an operator who
-// configured backups and silently got none would not find out until the day
-// they needed one.
+// startScheduledBackup fails the server rather than degrading: an operator who
+// configured backups and silently got none finds out on the day they need one.
 func startScheduledBackup(cfg conf.BackupConfig, repo account.Repository, log *zap.Logger) (func(), error) {
 	src, ok := repo.(persistence.Snapshotter)
 	if !ok {

@@ -10,12 +10,9 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-// GCS keeps snapshots in a Cloud Storage bucket.
-//
-// The bucket is as fund-bearing as the snapshots in it: give it its own
-// service account, keep the wallet's identity write-only on it if you can, and
-// turn on object versioning and a retention policy so that losing the wallet
-// host cannot also mean losing the copies.
+// GCS keeps snapshots in a Cloud Storage bucket. The bucket is as fund-bearing
+// as the snapshots in it: give it its own service account, and turn on object
+// versioning so a compromised wallet host cannot delete the copies.
 type GCS struct {
 	client *storage.Client
 	bucket string
@@ -47,8 +44,7 @@ func (g *GCS) Put(ctx context.Context, name string, r io.Reader) error {
 		return err
 	}
 
-	// The object only becomes visible when Close succeeds, so a failure here
-	// leaves nothing behind that looks like a finished snapshot.
+	// The object only becomes visible once Close succeeds.
 	return w.Close()
 }
 

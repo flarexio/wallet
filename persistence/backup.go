@@ -13,27 +13,22 @@ import (
 // holds records would merge two histories rather than restore one.
 var ErrStoreNotEmpty = errors.New("refusing to restore into a store that already holds records")
 
-// ErrSnapshotUnsupported is returned by a repository that has no way to stream
-// itself — the solana driver, or a composite whose main store is one.
+// ErrSnapshotUnsupported is returned by a repository that cannot stream itself.
 var ErrSnapshotUnsupported = errors.New("repository cannot be snapshotted")
 
-// Snapshotter is a repository that can stream a copy of itself while it is
-// still serving. This is what the scheduled backup runs against: badger's
-// Backup is a Stream read, so it needs no downtime and no second handle on the
-// directory — the CLI only stops the service because it opens badger itself
-// and badger locks the directory exclusively.
+// Snapshotter is a repository that can stream a copy of itself while serving.
+// The CLI needs downtime only because it opens badger itself and badger locks
+// the directory; Backup is a Stream read and needs neither.
 type Snapshotter interface {
-	// Snapshot writes everything newer than since, returning the version the
-	// caller would pass next time to continue from here. Pass 0 for a full
-	// snapshot.
+	// Snapshot writes everything newer than since, returning the version to
+	// continue from. Pass 0 for a full snapshot.
 	Snapshot(w io.Writer, since uint64) (uint64, error)
 }
 
 const restorePendingWrites = 256
 
-// Backup writes a snapshot of the badger store to w. This one opens the
-// directory itself, so the service must not be running against it — use a
-// Snapshotter when the store is already open.
+// Backup opens the directory itself, so the service must not be running
+// against it. Use a Snapshotter when the store is already open.
 func Backup(cfg *conf.BadgerPersistenceConfig, w io.Writer) error {
 	db, err := openQuietBadger(cfg)
 	if err != nil {
@@ -163,10 +158,8 @@ func (repo *badgerAccountRepository) Snapshot(w io.Writer, since uint64) (uint64
 	return repo.db.Backup(w, since)
 }
 
-// Snapshot streams the main store. Accounts are written to main synchronously
-// and only backfilled into the cache, so main is the copy that is guaranteed
-// complete; snapshotting the cache could miss an account whose backfill had
-// not landed.
+// Snapshot streams main, not the cache: the cache is backfilled in a goroutine
+// and can be missing an account that has not landed yet.
 func (repo *compositeAccountRepository) Snapshot(w io.Writer, since uint64) (uint64, error) {
 	main, ok := repo.main.(Snapshotter)
 	if !ok {
