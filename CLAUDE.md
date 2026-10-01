@@ -73,6 +73,14 @@ This is also the only workable answer to "move everyone to a new key": KMS versi
 
 Old key versions must stay enabled forever. Rotation works — new accounts use the new version — but retiring a version destroys every account derived from it, so the usual reason to rotate does not apply here.
 
+## Sealing records (`keys/cipher.go`, `account/sealed.go`)
+
+`keys.Cipher` encrypts values that have to live somewhere the account store is not — on chain, in a shared bucket — through a KMS `ENCRYPT_DECRYPT` key configured separately at `keys.records`.
+
+**The point is that it is a different key from the signing one**, so it can carry its own IAM: whoever can derive account keys still cannot read salts, and whoever can read salts still cannot derive. Putting both on one key, or publishing salts in the clear, collapses the two barriers the derivation design depends on into one.
+
+`account.SealSalt` fixes the AAD at the **wallet address**, so a sealed salt lifted out of one record cannot be opened under another. Nothing consumes this yet — it is the prerequisite for an on-chain store, not a user of one.
+
 ## Signing is always two-phase
 
 `service.go` exposes Initialize/Finalize pairs for both messages and transactions, and the HTTP layer maps them onto POST/PUT of the same URL:
@@ -151,7 +159,7 @@ A grant only covers *reaching* the wallet. Every individual signature is still a
 `account.Repository` has three drivers behind `persistence.NewAccountRepository`:
 
 - `badger` — local KV, the only fully working one
-- `solana` — on-chain; **every method returns "not implemented"**
+- `solana` — on-chain; **every method returns "not implemented"**, and there is nothing to implement against: the configured program id is `flarex`, a NATS/edge registry (its on-chain Anchor IDL has `Edge`, `EdgeCollection` and `NatsAccount` and no account-record instruction). An on-chain store needs a new program.
 - `composite` — reads try cache then main; writes go to main synchronously and backfill cache in a goroutine. Transactions (the signing cache) only ever touch the cache repo.
 
 `config.example.yaml` ships `driver: badger` — the only arrangement that actually works end to end. The composite/solana shape is kept there commented out for reference, and `conf/testdata/composite.yaml` is what keeps its nested parsing under test.

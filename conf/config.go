@@ -22,7 +22,13 @@ type Config struct {
 }
 
 type KeyConfig struct {
-	Google  GoogleKeyConfig  `yaml:"google"`
+	Google GoogleKeyConfig `yaml:"google"`
+
+	// Records seals field values stored outside the account store. It must be a
+	// different key from Google, with ENCRYPT_DECRYPT purpose and its own IAM,
+	// or it buys nothing.
+	Records GoogleKeyConfig `yaml:"records"`
+
 	Session SessionKeyConfig `yaml:"session"`
 }
 

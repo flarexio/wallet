@@ -4,6 +4,13 @@ keys:
     location: global
     keyRing: wallet
     key: main
+  # Seals values stored outside the account store. Must be a separate
+  # ENCRYPT_DECRYPT key with its own IAM, or it buys nothing.
+  records:
+    projectID: flarex-439501
+    location: global
+    keyRing: wallet-records
+    key: records
   session:
     key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
 
@@ -24,6 +31,8 @@ persistence:
 #       driver: solana
 #       solana:
 #         rpc: https://api.devnet.solana.com
+#         # No wallet program exists yet. This id is the `flarex` NATS/edge
+#         # registry, which has no instruction for account records.
 #         program: fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL
 #         path: # default: $HOME/.flarex/wallet
 #         account: id.json

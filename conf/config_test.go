@@ -34,6 +34,10 @@ func TestConfig(t *testing.T) {
 
 	assert.Len(cfg.Keys.Session.Key, 32)
 
+	// The cipher key must not be the signing key, or it carries the same IAM.
+	assert.NotEqual(cfg.Keys.Google.Path(), cfg.Keys.Records.Path())
+	assert.Equal("records", cfg.Keys.Records.Key)
+
 	assert.Equal(PersistenceDriverBadger, cfg.Persistence.Driver)
 	assert.NotNil(cfg.Persistence.Badger)
 
