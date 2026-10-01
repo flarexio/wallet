@@ -75,11 +75,11 @@ Old key versions must stay enabled forever. Rotation works — new accounts use 
 
 ## Sealing records (`keys/cipher.go`, `account/sealed.go`)
 
-`keys.Cipher` encrypts values that have to live somewhere the account store is not — on chain, in a shared bucket — through a KMS `ENCRYPT_DECRYPT` key configured separately at `keys.records`.
+`keys.Cipher` is AES-256-GCM under `keys.records.key`, a 32-byte key in config. It seals salts that have to live somewhere the account store is not — on chain, in a shared bucket.
 
-**The point is that it is a different key from the signing one**, so it can carry its own IAM: whoever can derive account keys still cannot read salts, and whoever can read salts still cannot derive. Putting both on one key, or publishing salts in the clear, collapses the two barriers the derivation design depends on into one.
+**The key is deliberately not in KMS.** A leaked KMS credential then cannot read salts, so the two barriers the derivation design depends on stay independent. The cost: this key is the only way to open sealed salts, so **it must be backed up apart from the server** — lose both and the off-server copy is useless. It never changes, so that is a one-time job.
 
-`account.SealSalt` fixes the AAD at the **wallet address**, so a sealed salt lifted out of one record cannot be opened under another. Nothing consumes this yet — it is the prerequisite for an on-chain store, not a user of one.
+`NewCipher` refuses the all-zero key the example ships. `account.SealSalt` fixes the AAD at the **wallet address**, so a sealed salt lifted out of one record cannot be opened under another. Nothing consumes this yet.
 
 ## Signing is always two-phase
 

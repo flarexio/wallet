@@ -1,82 +1,60 @@
 package keys
 
 import (
-	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"errors"
-	"fmt"
-
-	"cloud.google.com/go/kms/apiv1/kmspb"
-
-	kms "cloud.google.com/go/kms/apiv1"
-
-	"github.com/flarexio/wallet/conf"
 )
 
-// Cipher seals field values that have to live somewhere less trusted than the
-// account store — on chain, in a shared bucket.
-//
-// This is deliberately a different KMS key from the signing one, so that it can
-// carry its own IAM. Whoever can derive account keys still cannot read the
-// salts, and whoever can read the salts still cannot derive.
+// Cipher seals values stored outside the account store. Its key lives on the
+// server, apart from KMS, so a leaked KMS credential alone cannot read salts.
 type Cipher interface {
-	// Seal binds the ciphertext to aad, which must be reproducible at Open and
-	// must identify the record: a salt lifted from one account must not open
-	// under another.
 	Seal(plaintext, aad []byte) ([]byte, error)
 	Open(ciphertext, aad []byte) ([]byte, error)
-	Close() error
 }
 
-var ErrNoCipherKey = errors.New("no cipher key configured")
+var (
+	ErrNoCipherKey     = errors.New("no cipher key configured")
+	ErrShortCiphertext = errors.New("ciphertext too short")
+)
 
-func NewGoogleCipher(cfg conf.GoogleKeyConfig) (Cipher, error) {
-	if cfg.Key == "" || cfg.KeyRing == "" {
+func NewCipher(key [32]byte) (Cipher, error) {
+	if key == [32]byte{} {
 		return nil, ErrNoCipherKey
 	}
 
-	client, err := kms.NewKeyManagementClient(context.Background())
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
 	}
 
-	return &googleCipher{client, cfg.Path()}, nil
-}
-
-type googleCipher struct {
-	client *kms.KeyManagementClient
-	name   string
-}
-
-func (c *googleCipher) Seal(plaintext, aad []byte) ([]byte, error) {
-	if len(plaintext) == 0 {
-		return nil, errors.New("nothing to seal")
-	}
-
-	resp, err := c.client.Encrypt(context.Background(), &kmspb.EncryptRequest{
-		Name:                        c.name,
-		Plaintext:                   plaintext,
-		AdditionalAuthenticatedData: aad,
-	})
+	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, err
 	}
 
-	return resp.Ciphertext, nil
+	return &aesCipher{gcm}, nil
 }
 
-func (c *googleCipher) Open(ciphertext, aad []byte) ([]byte, error) {
-	resp, err := c.client.Decrypt(context.Background(), &kmspb.DecryptRequest{
-		Name:                        c.name,
-		Ciphertext:                  ciphertext,
-		AdditionalAuthenticatedData: aad,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("cipher: %w", err)
+type aesCipher struct {
+	gcm cipher.AEAD
+}
+
+func (c *aesCipher) Seal(plaintext, aad []byte) ([]byte, error) {
+	nonce := make([]byte, c.gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
 	}
 
-	return resp.Plaintext, nil
+	return c.gcm.Seal(nonce, nonce, plaintext, aad), nil
 }
 
-func (c *googleCipher) Close() error {
-	return c.client.Close()
+func (c *aesCipher) Open(ciphertext, aad []byte) ([]byte, error) {
+	n := c.gcm.NonceSize()
+	if len(ciphertext) < n {
+		return nil, ErrShortCiphertext
+	}
+
+	return c.gcm.Open(nil, ciphertext[:n], ciphertext[n:], aad)
 }

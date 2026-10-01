@@ -4,13 +4,9 @@ keys:
     location: global
     keyRing: wallet
     key: main
-  # Seals values stored outside the account store. Must be a separate
-  # ENCRYPT_DECRYPT key with its own IAM, or it buys nothing.
+  # Seals salts stored off the server. Back it up apart from the server.
   records:
-    projectID: flarex-439501
-    location: global
-    keyRing: wallet-records
-    key: records
+    key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
   session:
     key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
 

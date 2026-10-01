@@ -27,8 +27,6 @@ func (fakeCipher) Open(ciphertext, aad []byte) ([]byte, error) {
 	return ciphertext[1+n:], nil
 }
 
-func (fakeCipher) Close() error { return nil }
-
 func testPubkey(n byte) ed25519.PublicKey {
 	seed := make([]byte, ed25519.SeedSize)
 	seed[0] = n
