@@ -34,6 +34,8 @@ func TestConfig(t *testing.T) {
 
 	assert.Len(cfg.Keys.Session.Key, 32)
 
+	assert.Len(cfg.Keys.Records.Key, 32)
+
 	assert.Equal(PersistenceDriverBadger, cfg.Persistence.Driver)
 	assert.NotNil(cfg.Persistence.Badger)
 

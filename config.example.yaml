@@ -4,6 +4,9 @@ keys:
     location: global
     keyRing: wallet
     key: main
+  # Seals salts stored off the server. Back it up apart from the server.
+  records:
+    key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
   session:
     key: [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
 
@@ -24,6 +27,8 @@ persistence:
 #       driver: solana
 #       solana:
 #         rpc: https://api.devnet.solana.com
+#         # No wallet program exists yet. This id is the `flarex` NATS/edge
+#         # registry, which has no instruction for account records.
 #         program: fx72MZ7SPxwePzFiMagFZakeXxaJn7oLGDd3wxLuENL
 #         path: # default: $HOME/.flarex/wallet
 #         account: id.json

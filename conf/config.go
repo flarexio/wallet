@@ -23,6 +23,7 @@ type Config struct {
 
 type KeyConfig struct {
 	Google  GoogleKeyConfig  `yaml:"google"`
+	Records RecordsKeyConfig `yaml:"records"`
 	Session SessionKeyConfig `yaml:"session"`
 }
 
@@ -34,6 +35,12 @@ type GoogleKeyConfig struct {
 }
 
 type SessionKeyConfig struct {
+	Key [32]byte `yaml:"key"`
+}
+
+// RecordsKeyConfig seals salts stored off the server. It is the only way to
+// open them, so it must be backed up apart from the server.
+type RecordsKeyConfig struct {
 	Key [32]byte `yaml:"key"`
 }
 
