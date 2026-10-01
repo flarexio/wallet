@@ -14,24 +14,15 @@ export interface TrustedSite {
 
 type TrustStore = { [wallet: string]: { [origin: string]: TrustedSite } };
 
-/**
- * Remembers which sites the user has connected a wallet to.
- *
- * Trust is scoped to a wallet address, not to the browser: switching accounts
- * must not inherit the grants of the previous one. Grants live in
- * localStorage, so they are per device and the user can drop them wholesale by
- * clearing site data.
- */
+// Grants are scoped to a wallet address, not to the browser: switching
+// accounts must not inherit the previous one's sites.
 @Injectable({
   providedIn: 'root'
 })
 export class TrustService {
 
-  /**
-   * Reduces a URL to the origin used as the grant key, or null if it is not
-   * something a browsing context could have sent — anything but http(s) is
-   * refused rather than normalized into a key that looks legitimate.
-   */
+  // Anything but http(s) is refused rather than normalized into a key that
+  // looks legitimate.
   normalize(origin: string | undefined | null): string | null {
     if (!origin) return null;
 
@@ -77,7 +68,6 @@ export class TrustService {
     this.save(wallet, sites);
   }
 
-  /** Records that a granted site was used, so the list can be ordered by recency. */
   touch(wallet: PublicKey | string, origin: string) {
     const key = this.normalize(origin);
     if (key == null) return;

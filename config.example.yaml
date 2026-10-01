@@ -33,6 +33,22 @@ persistence:
 #         name: wallets
 #         path: # default: $HOME/.flarex/wallet
 
+# Off until an interval is set. The passphrase comes from
+# $WALLET_BACKUP_PASSPHRASE, and serve refuses to start without it.
+#
+# backup:
+#   interval: 6h
+#   keep: 28          # default: 28
+#   destination:
+#     driver: dir
+#     dir:
+#       path: /var/backups/wallet
+#
+#     # driver: gcs
+#     # gcs:
+#     #   bucket: flarex-wallet-backups
+#     #   prefix: prod
+
 jwt:
   issuer: identity.flarex.io
   audience: talkix.flarex.io

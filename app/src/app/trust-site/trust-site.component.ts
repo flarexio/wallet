@@ -5,22 +5,17 @@ import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/materia
 import { MatIconModule } from '@angular/material/icon';
 
 export interface TrustSiteRequest {
-  /** The origin the decision is about — verified when it came from the event. */
   origin: string;
   app: string;
   icon?: string;
 
-  /**
-   * False when the origin is only what the caller claimed. The session
-   * transport carries no browser-verified origin, so such a request is shown
-   * with a warning and never remembered.
-   */
+  // False when the origin is only what the caller claimed. Shown with a
+  // warning, and never remembered.
   verified: boolean;
 
-  /** Set when the caller claimed an origin other than the verified one. */
+  // Set when the caller claimed an origin other than the verified one.
   claimed?: string;
 
-  /** What the site is asking for, once connected. */
   action: 'connect' | 'sign message' | 'sign transaction';
 }
 

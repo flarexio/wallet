@@ -13,10 +13,22 @@ import (
 // holds records would merge two histories rather than restore one.
 var ErrStoreNotEmpty = errors.New("refusing to restore into a store that already holds records")
 
+// ErrSnapshotUnsupported is returned by a repository that cannot stream itself.
+var ErrSnapshotUnsupported = errors.New("repository cannot be snapshotted")
+
+// Snapshotter is a repository that can stream a copy of itself while serving.
+// The CLI needs downtime only because it opens badger itself and badger locks
+// the directory; Backup is a Stream read and needs neither.
+type Snapshotter interface {
+	// Snapshot writes everything newer than since, returning the version to
+	// continue from. Pass 0 for a full snapshot.
+	Snapshot(w io.Writer, since uint64) (uint64, error)
+}
+
 const restorePendingWrites = 256
 
-// Backup writes a snapshot of the badger store to w. The service must not be
-// running against the same directory.
+// Backup opens the directory itself, so the service must not be running
+// against it. Use a Snapshotter when the store is already open.
 func Backup(cfg *conf.BadgerPersistenceConfig, w io.Writer) error {
 	db, err := openQuietBadger(cfg)
 	if err != nil {
@@ -140,4 +152,19 @@ func BadgerConfig(cfg conf.PersistenceConfig) (*conf.BadgerPersistenceConfig, er
 	default:
 		return nil, errors.New("no badger store in this persistence config")
 	}
+}
+
+func (repo *badgerAccountRepository) Snapshot(w io.Writer, since uint64) (uint64, error) {
+	return repo.db.Backup(w, since)
+}
+
+// Snapshot streams main, not the cache: the cache is backfilled in a goroutine
+// and can be missing an account that has not landed yet.
+func (repo *compositeAccountRepository) Snapshot(w io.Writer, since uint64) (uint64, error) {
+	main, ok := repo.main.(Snapshotter)
+	if !ok {
+		return 0, ErrSnapshotUnsupported
+	}
+
+	return main.Snapshot(w, since)
 }
